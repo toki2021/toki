@@ -1,0 +1,30 @@
+*.iml
+.gradle
+/build
+*/build
+local.properties
+.idea
+.DS_Store
+*captures
+.externalNativeBuild
+.cxx
+*.apk
+*.ap_
+*.aab
+*.dex
+*.class
+*.log
+*.hprof
+*.keystore
+*.jks
+*.p8
+*.p12
+*.key
+*.pfx
+*/out
+.gradle/
+build/
+app/build/
+.zcode/
+SELECT id,merchant,amountCents FROM transactions ORDER BY time DESC LIMIT 2;
+SELECT id,merchant,amountCents FROM transactions ORDER BY time DESC LIMIT 3;

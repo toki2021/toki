@@ -1,0 +1,85 @@
+package com.zhuanz.autoleger.notify
+
+import android.app.Notification
+import android.service.notification.NotificationListenerService
+import android.service.notification.StatusBarNotification
+import com.zhuanz.autoleger.LedgerAppProvider
+import com.zhuanz.autoleger.data.PENDING_CONFIRM
+import com.zhuanz.autoleger.data.PENDING_UNPARSED
+import com.zhuanz.autoleger.data.PendingEntryEntity
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+
+/**
+ * 监听微信/支付宝的通知，把疑似支付通知解析后生成"待确认入账"通知。
+ * 用户点通知上的【入账】直接入库，点【修改】进编辑页，点【忽略】丢弃；
+ * 解析失败的进入 App 内"待处理"列表手动补录。
+ */
+class PaymentNotificationListener : NotificationListenerService() {
+
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    // 去重检查与入库必须串行：两条相同通知并发回调时，不加锁会双双通过去重检查
+    private val insertMutex = Mutex()
+
+    override fun onNotificationPosted(sbn: StatusBarNotification) {
+        val pkg = sbn.packageName ?: return
+        if (pkg == packageName) return
+        val extras = sbn.notification?.extras ?: return
+        val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
+        val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString().orEmpty()
+        if (!PaymentParser.looksLikePayment(pkg, title, text)) return
+
+        val postedAt = sbn.postTime
+        scope.launch {
+            val container = (applicationContext as LedgerAppProvider).container
+            insertMutex.withLock {
+            // 去重：同一通知常被系统多次回调（合并通知/更新），60 秒内同内容的不再重复入列
+            val recentPendings = container.pendingEntryDao.observeAll().first()
+            if (recentPendings.any {
+                    it.packageName == pkg && it.title == title && it.text == text &&
+                        postedAt - it.time < 60_000
+                }
+            ) return@launch
+            // 用户可能已通过确认通知入账：2 分钟内同原文的账单存在则不再建待确认
+            val rawText = "$title $text"
+            val recentTx = container.transactionDao.observeAll().first()
+            if (recentTx.any { it.rawText == rawText && postedAt - it.time < 120_000 }) return@launch
+
+            val parsed = PaymentParser.parse(title, text)
+            val entry = com.zhuanz.autoleger.data.PendingEntryEntity(
+                packageName = pkg,
+                title = title,
+                text = text,
+                amountCents = parsed?.amountCents,
+                merchant = parsed?.merchant,
+                status = if (parsed != null) com.zhuanz.autoleger.data.PENDING_CONFIRM
+                else com.zhuanz.autoleger.data.PENDING_UNPARSED,
+                time = postedAt,
+            )
+            val id = container.pendingEntryDao.insert(entry)
+            // 静默捕获：只记金额时不弹窗（避免骚扰），读到商户时才由读屏侧弹出确认
+            val popup = applicationContext.getSharedPreferences("settings", MODE_PRIVATE)
+                .getBoolean("notify_popup_generic", false)
+            if (parsed != null && popup) {
+                ConfirmNotifier.postConfirmNotification(applicationContext, id, parsed, postedAt)
+            }
+            // 支付结果页此刻正在弹出，触发截屏 OCR 读取商户并补全
+            if (parsed != null) {
+                // 读屏服务被系统清理时（进程活着但服务已解绑），提醒用户一键恢复
+                if (BillReaderService.instance == null) {
+                    ReaderOfflineNotifier.postIfNeeded(applicationContext)
+                }
+                BillReaderService.requestCapture()
+            }
+            }
+        }
+    }
+
+    override fun onNotificationRemoved(sbn: StatusBarNotification) = Unit
+}

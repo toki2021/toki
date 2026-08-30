@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">自动记账</string>
+    <string name="bill_reader_desc">打开微信/支付宝的账单详情页时，读取收款方商户名，自动补全对应的待确认账单。仅在检测到账单详情页时读取，不上传任何数据。</string>
+</resources>
