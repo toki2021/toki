@@ -140,6 +140,7 @@ fun AutoLedgerApp(deepLinkFlow: Flow<Long>) {
                     HomeScreen(
                         onEdit = { txId -> navController.navigate(Routes.edit(txId, -1)) },
                         onStats = { navController.navigate(Routes.STATS) },
+                        vm = vm,
                     )
                 }
                 composable(Routes.STATS) { StatsScreen() }
@@ -170,7 +171,7 @@ fun AutoLedgerApp(deepLinkFlow: Flow<Long>) {
                     )
                 }
                 composable(Routes.SETTINGS) {
-                    SettingsScreen()
+                    SettingsScreen(uiVariantVm = vm)
                 }
             }
 

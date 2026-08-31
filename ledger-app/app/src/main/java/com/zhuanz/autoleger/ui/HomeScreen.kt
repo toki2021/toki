@@ -89,7 +89,7 @@ private fun homeViewModel(container: AppContainer): HomeViewModel {
 fun HomeScreen(
     onEdit: (Long) -> Unit,
     onStats: () -> Unit,
-    vm: UiVariantViewModel = viewModel(),
+    vm: UiVariantViewModel,
 ) {
     val uiState by vm.uiState.collectAsState()
     val container = rememberContainer()

@@ -44,7 +44,7 @@ import com.zhuanz.autoleger.R
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
-    uiVariantVm: UiVariantViewModel = viewModel(),
+    uiVariantVm: UiVariantViewModel,
 ) {
     val context = LocalContext.current
     // 与 AppNav/Theme 共享同一 Activity 级实例，选择实时生效

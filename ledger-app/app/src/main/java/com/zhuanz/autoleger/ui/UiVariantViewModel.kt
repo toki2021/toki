@@ -1,7 +1,9 @@
 package com.zhuanz.autoleger.ui
 
 import android.content.Context
+import android.util.Log
 import androidx.lifecycle.ViewModel
+import com.zhuanz.autoleger.BuildConfig
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -28,16 +30,24 @@ class UiVariantViewModel : ViewModel() {
     private val _uiState = MutableStateFlow(UiVariantState())
     val uiState: StateFlow<UiVariantState> = _uiState.asStateFlow()
 
+    private fun log(action: String) {
+        if (!BuildConfig.DEBUG) return
+        val s = _uiState.value
+        Log.d("UiVariantVM", "$action #${hashCode()} current=${s.current} previewing=${s.previewing} preview=${s.previewVariant} effective=${s.effective}")
+    }
+
     fun load(context: Context) {
         val i = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .getInt(KEY + "_v2", UiVariant.F.ordinal)
         _uiState.update { it.copy(current = UiVariant.fromIndex(i)) }
+        log("load(prefs=$i)")
     }
 
     fun apply(context: Context, variant: UiVariant) {
         _uiState.update { it.copy(previewing = false, current = variant) }
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit().putInt(KEY + "_v2", variant.ordinal).apply()
+        log("apply -> $variant")
     }
 
     /** 进入/退出预览；进入时以当前方案为起点 */
@@ -48,11 +58,13 @@ class UiVariantViewModel : ViewModel() {
                 previewVariant = if (on) it.current else it.previewVariant,
             )
         }
+        log("setPreview($on)")
     }
 
     /** 预览模式的目标方案 */
     fun setPreviewVariant(variant: UiVariant) {
         _uiState.update { it.copy(previewVariant = variant) }
+        log("setPreviewVariant -> $variant")
     }
 
     /** 预览中确认采用当前方案 */
@@ -61,6 +73,7 @@ class UiVariantViewModel : ViewModel() {
             state.copy(previewing = false)
         }
         apply(context, _uiState.value.previewVariant)
+        log("confirmPreview")
     }
 
     /** 预览中直接退出预览（不采用） */
