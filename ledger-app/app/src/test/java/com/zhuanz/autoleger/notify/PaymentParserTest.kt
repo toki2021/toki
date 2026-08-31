@@ -53,6 +53,66 @@ class PaymentParserTest {
         assertEquals(false, r?.merchant?.contains("条") == true)
         assertEquals(false, r?.merchant?.contains(":") == true)
     }
+
+    // ===== 优惠场景：取实付金额，不取优惠金额（用户实测 付14.60 优惠0.46 实付14.14）=====
+
+    @Test
+    fun 优惠通知_优先取实付标签金额() {
+        val r = parse("微信支付", "支付成功，已优惠¥0.46，实付¥14.14")
+        assertEquals(1414L, r?.amountCents)
+    }
+
+    @Test
+    fun 优惠通知_无标签时剔除优惠金额取唯一主金额() {
+        val r = parse("微信支付", "已支付¥14.14，已优惠¥0.46")
+        assertEquals(1414L, r?.amountCents)
+    }
+
+    @Test
+    fun 优惠通知_元计价() {
+        val r = parse("支付宝", "支付成功 14.14元（已优惠0.46元）")
+        assertEquals(1414L, r?.amountCents)
+    }
+
+    @Test
+    fun 优惠通知_多个主金额无法确定时不猜() {
+        // 没有实付标签、两个都是主金额语境 → 宁可不解析（进待处理），也不能猜错
+        val r = parse("微信支付", "支付成功 14.60 已优惠0.46 实际14.14")
+        assertEquals(null, r)
+    }
+}
+
+/** 通知粗过滤：营销/事件拦截，真实支付放行 */
+class LooksLikePaymentTest {
+
+    private fun looks(title: String, text: String, pkg: String = "com.tencent.mm") =
+        PaymentParser.looksLikePayment(pkg, title, text)
+
+    @Test
+    fun 营销与事件通知_拦截() {
+        assertEquals(false, looks("微信支付", "多笔立减优惠等你使用"))
+        assertEquals(false, looks("淘宝闪购", "红包今晚失效，速来领取"))
+        assertEquals(false, looks("蜂鸟准时达", "您的订单已准时送达，感谢惠顾"))
+        assertEquals(false, looks("微信支付", "验证码123456，请勿泄露"))
+        assertEquals(false, looks("支付宝", "还款日提醒：本月账单已出"))
+    }
+
+    @Test
+    fun 真实支付通知_放行() {
+        assertEquals(true, looks("微信支付", "已支付¥14.14"))
+        assertEquals(true, looks("微信支付", "支付成功，已优惠0.46，实付14.14元"))
+        assertEquals(true, looks("微信支付", "向杨青凤转账¥1000.00"))
+        assertEquals(true, looks("微信支付", "退款成功¥12.00"))
+    }
+
+    /** 真机样本：支付宝标准通知带"点击领取积分"，不能被词表误杀 */
+    @Test
+    fun 支付宝实付句式_放行() {
+        assertEquals(true, PaymentParser.looksLikePayment(
+            "com.eg.android.AlipayGphone", "交易提醒",
+            "你有一笔1.87元的支出，点击领取10个支付宝积分。",
+        ))
+    }
 }
 
 /** 用户真机实测的支付宝通知样本（2026-08-30 ¥1.87 那笔） */

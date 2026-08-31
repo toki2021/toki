@@ -101,12 +101,17 @@ class BillReaderService : AccessibilityService() {
     private val readRunnable: Runnable = Runnable {
         val pkg = lastPkg ?: return@Runnable
         scope.launch {
+            // 通知侧解析出的实付金额是权威值：读屏/OCR 只确认页面并补商户，绝不改写金额
+            // （"付14.60优惠0.46"的页面曾把小字号优惠金额当成实付，金额必须以通知为准）
+            val container = (applicationContext as LedgerAppProvider).container
+            val expected = targetPendingId?.let { container.pendingEntryDao.getById(it)?.amountCents }
             // 引擎一：无障碍树（原生页面）
             val texts = lastSnapshot ?: readWindowFor(pkg)
             lastSnapshot = null
-            var bill = if (texts.isEmpty()) null else BillPageParser.parse(texts)
+            var bill = if (texts.isEmpty()) null else BillPageParser.parse(texts, expectedAmountCents = expected)
             if (bill != null) {
                 retries = 0
+                if (BuildConfig.DEBUG) Log.d(TAG, "bill(tree) amount=${bill.amountCents} merchant=${bill.merchant} expected=$expected")
                 handleBill(bill, fromOcr = false, targetPendingId)
                 return@launch
             }
@@ -117,9 +122,10 @@ class BillReaderService : AccessibilityService() {
                 retries = 0
                 return@launch
             }
-            bill = screenshotOcr()
+            bill = screenshotOcr(expected)
             if (bill != null) {
                 retries = 0
+                if (BuildConfig.DEBUG) Log.d(TAG, "bill(ocr) amount=${bill.amountCents} merchant=${bill.merchant} strong=${bill.strongPage} expected=$expected")
                 // OCR 模式只补全已有记录，不凭空建账（避免把账单列表页等误识别成新账单）
                 handleBill(bill, fromOcr = true, targetPendingId)
                 return@launch
@@ -180,7 +186,7 @@ class BillReaderService : AccessibilityService() {
     }
 
     /** 截屏 → OCR → 文本行。截图不落盘，位图识别后立即回收 */
-    private suspend fun screenshotOcr(): BillPageParser.Bill? =
+    private suspend fun screenshotOcr(expectedAmountCents: Long? = null): BillPageParser.Bill? =
         suspendCancellableCoroutine { cont ->
             try {
                 takeScreenshot(android.view.Display.DEFAULT_DISPLAY, mainExecutor,
@@ -205,7 +211,9 @@ class BillReaderService : AccessibilityService() {
                                     // 隐私：release 下绝不输出 OCR 文本内容（含商户名等敏感信息）
                                     if (BuildConfig.DEBUG) Log.d(TAG, "ocr lines=${lines.size}: ${lines.joinToString("|").take(300)}")
                                     soft.recycle()
-                                    if (cont.isActive) cont.resume(BillPageParser.parseOcr(lines))
+                                    if (cont.isActive) cont.resume(
+                                        BillPageParser.parseOcr(lines, expectedAmountCents = expectedAmountCents)
+                                    )
                                 }
                                 .addOnFailureListener { e ->
                                     if (BuildConfig.DEBUG) Log.d(TAG, "ocr fail: ${e.message}")
@@ -253,7 +261,12 @@ class BillReaderService : AccessibilityService() {
         if (targetPendingId != null) {
             val target = container.pendingEntryDao.getById(targetPendingId)
             val contentPkg = rootInActiveWindow?.packageName?.toString()
-            if (target != null && targetMatches(target, bill, contentPkg)) {
+            val matched = target != null && targetMatches(target, bill, contentPkg)
+            if (BuildConfig.DEBUG) Log.d(
+                TAG,
+                "handleBill[0-target] id=$targetPendingId targetAmount=${target?.amountCents} billAmount=${bill.amountCents} matched=$matched"
+            )
+            if (target != null && matched) {
                 enrichPending(container, target, bill, now)
             }
             clearTarget(targetPendingId)
@@ -266,6 +279,7 @@ class BillReaderService : AccessibilityService() {
             it.amountCents == bill.amountCents && now - it.time < 10 * 60_000L
         }
         if (pendingMatches.size == 1) {
+            if (BuildConfig.DEBUG) Log.d(TAG, "handleBill[1-pending] 唯一同金额待确认 id=${pendingMatches.first().id}")
             enrichPending(container, pendingMatches.first(), bill, now)
             return
         }
@@ -280,6 +294,7 @@ class BillReaderService : AccessibilityService() {
         }
         val tx = candidates.singleOrNull()
         if (tx != null) {
+            if (BuildConfig.DEBUG) Log.d(TAG, "handleBill[2-tx] 补全已入账 id=${tx.id}")
             val merchant = captureMerchant(bill) ?: return
             val category = container.matchCategory(merchant)
             container.transactionDao.update(
@@ -294,7 +309,11 @@ class BillReaderService : AccessibilityService() {
         // 3) 都没有 → 新建待确认条目并弹确认通知。
         //    OCR 模式必须命中强页面特征（支付成功/凭证页）才允许建账，
         //    账单列表页等只有弱特征的页面会被拦截，绝不凭空创建。
-        if (fromOcr && !bill.strongPage) return
+        if (fromOcr && !bill.strongPage) {
+            if (BuildConfig.DEBUG) Log.d(TAG, "handleBill[3-new] 拦截：非强页面特征不建账")
+            return
+        }
+        if (BuildConfig.DEBUG) Log.d(TAG, "handleBill[3-new] 新建待确认 amount=${bill.amountCents} merchant=${bill.merchant}")
         val id = container.pendingEntryDao.insert(
             PendingEntryEntity(
                 packageName = rootInActiveWindow?.packageName?.toString() ?: "unknown",

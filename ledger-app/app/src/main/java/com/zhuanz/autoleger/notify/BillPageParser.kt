@@ -35,6 +35,31 @@ object BillPageParser {
         "余额", "零钱", "账单", "凭证", "入账", "银行卡", "红包",
     )
 
+    // OCR 强页面特征：结果页/凭证页才算"可凭空新建待确认"的页面。
+    // 只命中弱特征（如"恭喜获得¥0.46红包"营销弹窗）不允许新建账单
+    private val ocrStrongMarkers = listOf(
+        "支付成功", "付款成功", "成功付款", "支付完成", "已支付", "已付款", "已完成支付",
+        "交易成功", "转账成功", "还款成功", "转入成功", "转出成功", "充值成功",
+        "支付凭证", "付款凭证", "交易凭证",
+        "付款详情", "交易详情", "账单详情",
+        "已入账", "已存入零钱",
+    )
+
+    // 优惠/抵扣语境词：整行含这些词的 OCR 行，其金额不是实付（"已优惠¥0.46"）
+    private val discountWords = listOf(
+        "优惠", "立减", "满减", "折扣", "已省", "省了", "节省", "减免", "抵扣", "返现", "已减",
+    )
+    // 拼接文本里金额前 6 字内的语境词（比整行判定更细，额外含"券/红包"）
+    private val discountPrefix = discountWords + listOf("券", "红包")
+
+    // 明确实付标签："实付¥14.14"、"支付金额：14.14元"、"合计 ¥14.14"
+    private val labeledAmount = Regex(
+        "(?:实付|实际支付|实付款|支付金额|付款金额|交易金额|合计)[：:\\s]*[¥￥]?\\s*([0-9][0-9,]*(?:\\.[0-9]{1,2})?)"
+    )
+
+    // 裸数字行（OCR 把大字号金额拆成 "¥"+"14.14" 两行时，第二行就是这个形态）
+    private val bareNumber = Regex("[0-9][0-9,]*(?:\\.[0-9]{1,2})?")
+
     // 商户字段的标签（微信"收款方"，支付宝"商家"等）
     private val merchantLabels = listOf("收款方", "收款商户", "收款商家", "商家", "商户", "对方账户")
 
@@ -57,14 +82,16 @@ object BillPageParser {
     // 时间/日期行（历史列表页里大量出现，不是商户）
     private val timeOrDate = Regex("^(\\d{1,2}:\\d{2}|\\d{1,2}月\\d{1,2}日|\\d{4}[年/-])")
 
-    fun parse(texts: List<String>, fromOcr: Boolean = false): Bill? {
+    fun parse(
+        texts: List<String>,
+        fromOcr: Boolean = false,
+        expectedAmountCents: Long? = null,
+    ): Bill? {
         val markers = if (fromOcr) ocrMarkers else pageMarkers
         if (texts.none { t -> markers.any { m -> t.contains(m) } }) return null
         val joined = texts.joinToString(" ")
-        val amountText = amountRe.find(joined)?.groupValues?.get(1)
-            ?.replace(",", "") ?: return null
         // BigDecimal 精确换算，避免 Math.round(amount * 100) 的 double 精度损失
-        val amountCents = amountText.toCents() ?: return null
+        val amountCents = pickAmount(joined, expectedAmountCents) ?: return null
         if (amountCents <= 0) return null
 
         val merchant = extractMerchant(texts) ?: return null
@@ -74,36 +101,111 @@ object BillPageParser {
     /**
      * OCR 模式专用：以金额行锚点提取商户。
      * 真实样本（用户手机实测）："¥0.10 / 收款方(误识为女款方) / tokizero / 使用零钱支付"
+     *
+     * 金额挑选规则（"付14.60优惠0.46实付14.14"这类页面曾把 0.46 记成入账金额）：
+     * 1) 通知侧解析出的实付金额是权威值（expectedAmountCents），页面上确认存在即采用；
+     * 2) 剔除"已优惠/立减"等语境行的金额，OCR 把大字号金额拆成 "¥"+"14.14" 两行时先拼回；
+     * 3) 剩余主金额唯一才采用，多个（列表页）一律放弃——宁可少记，不可错记。
      */
-    fun parseOcr(lines: List<String>, sourceFallback: String? = null): Bill? {
+    fun parseOcr(
+        lines: List<String>,
+        sourceFallback: String? = null,
+        expectedAmountCents: Long? = null,
+    ): Bill? {
+        val norm = joinSplitYuan(lines)
         // 1) 页面须含资金类关键词（排除随机 H5 页面）
-        if (lines.none { t -> ocrMarkers.any { m -> t.contains(m) } }) return null
+        if (norm.none { t -> ocrMarkers.any { m -> t.contains(m) } }) return null
 
-        // 2) 通用结果页判定：恰好一个金额。多个金额 = 列表页，放弃
-        val distinctAmounts = lines.mapNotNull { ocrAmountToCents(it) }.distinct()
-        if (distinctAmounts.size != 1) return null
-        val amountCents = distinctAmounts.first()
+        // 2) 金额：期望金额锚定 → 剔除优惠语境后须唯一
+        val amountCents = pickOcrAmount(norm, expectedAmountCents) ?: return null
 
         // 3) 商户/对象尽力提取：动宾句式 → 标签值 → 金额行邻近 → 页面顶部干净行
-        val merchant = lines.firstNotNullOfOrNull { l ->
+        val merchant = norm.firstNotNullOfOrNull { l ->
             payTo.find(l)?.groupValues?.get(1)?.let { sanitize(it) }
                 ?: transferTo.find(l)?.groupValues?.get(1)?.let { sanitize(it) }
         }
             ?: run {
-                val amountIdx = lines.indexOfFirst { amountRe.containsMatchIn(it) }
+                val amountIdx = norm.indexOfFirst {
+                    ocrAmountToCents(it) == amountCents && discountWords.none { w -> w in it }
+                }
                 val candidates = buildList {
                     if (amountIdx >= 0) {
-                        addAll(lines.drop(amountIdx + 1).take(5))
-                        addAll(lines.take(amountIdx).reversed().take(4))
+                        addAll(norm.drop(amountIdx + 1).take(5))
+                        addAll(norm.take(amountIdx).reversed().take(4))
                     }
                 }
                 candidates.firstNotNullOfOrNull { ocrCandidateMerchant(it) }
             }
-            ?: lines.firstNotNullOfOrNull { ocrCandidateMerchant(it) }
+            ?: norm.firstNotNullOfOrNull { ocrCandidateMerchant(it) }
             ?: sourceFallback?.let { sanitize(it) }
             ?: return null
 
-        return Bill(amountCents, merchant, strongPage = true)
+        // 4) 强页面特征：只有结果页/凭证页允许 OCR 凭空新建待确认条目
+        val strongPage = norm.any { t -> ocrStrongMarkers.any { m -> t.contains(m) } }
+        return Bill(amountCents, merchant, strongPage = strongPage)
+    }
+
+    /**
+     * 拼接文本（无障碍树/通知）的金额挑选：期望金额 → 实付标签 → 主金额唯一。
+     * 期望金额来自通知侧解析的实付值，页面只需确认存在即采用——OCR/读屏不覆盖通知金额。
+     */
+    private fun pickAmount(text: String, expected: Long?): Long? {
+        expected?.let { e -> if (mainAmounts(text).contains(e)) return e }
+        labeledAmount.find(text)?.groupValues?.get(1)?.replace(",", "")
+            ?.toCents()?.takeIf { it > 0 }?.let { return it }
+        return mainAmounts(text).singleOrNull()
+    }
+
+    /** 拼接文本中所有"主金额"（剔除"已优惠/立减/红包"等语境的金额），按出现顺序去重 */
+    private fun mainAmounts(text: String): List<Long> {
+        val matches = amountRe.findAll(text).toList()
+        return matches
+            .filter { m ->
+                val prefix = text.substring(maxOf(0, m.range.first - 6), m.range.first)
+                discountPrefix.none { it in prefix }
+            }
+            .mapNotNull { it.groupValues[1].replace(",", "").toCents()?.takeIf { c -> c > 0 } }
+            .distinct()
+    }
+
+    /** OCR 行的金额挑选：期望金额锚定 → 剔除优惠语境行后须唯一 */
+    private fun pickOcrAmount(lines: List<String>, expected: Long?): Long? {
+        val mains = mutableListOf<Long>()
+        for ((i, l) in lines.withIndex()) {
+            // 行内含"已优惠/立减"等语境词 → 该行金额不是实付
+            if (discountWords.any { it in l }) continue
+            // 语境词单独成行（"已优惠" + "¥0.46" 被拆成两行）时，紧随其后的金额也是优惠金额
+            val prev = lines.getOrNull(i - 1)
+            if (prev != null && ocrAmountToCents(prev) == null && discountWords.any { it in prev }) continue
+            ocrAmountToCents(l)?.let { mains.add(it) }
+        }
+        val distinct = mains.distinct()
+        expected?.let { e -> if (e in distinct) return e }
+        return distinct.singleOrNull()
+    }
+
+    /**
+     * OCR 把大字号金额拆成两行的常见情形拼回一行："¥" + "14.14" → "¥14.14"，
+     * 或 "已支付¥" + "14.14" → "已支付¥14.14"。不拼回的话这两行都匹配不到金额，
+     * 页面上唯一能识别的 ¥ 金额会剩下小字号的"已优惠¥0.46"——正是误记账的来源
+     */
+    private fun joinSplitYuan(lines: List<String>): List<String> {
+        val out = mutableListOf<String>()
+        var i = 0
+        while (i < lines.size) {
+            val cur = lines[i].trim()
+            val next = lines.getOrNull(i + 1)?.trim()
+            val yuanOnly = cur == "¥" || cur == "￥" ||
+                ((cur.endsWith("¥") || cur.endsWith("￥")) && cur.none { it.isDigit() })
+            if (yuanOnly && next != null && bareNumber.matches(next)) {
+                out.add(cur + next)
+                i += 2
+            } else {
+                out.add(cur)
+                i++
+            }
+        }
+        return out
     }
 
 

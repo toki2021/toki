@@ -56,6 +56,61 @@ class BillPageParserTest {
         assertEquals(20000L, r?.amountCents)
         assertEquals("瑞幸咖啡-国贸店", r?.merchant)
     }
+
+    // ===== 优惠场景（用户实测：付14.60优惠0.46实付14.14，曾把 0.46 记成入账金额）=====
+
+    /** 大字号金额被 OCR 拆成 "¥"+"14.14" 两行，优惠也拆成 "已优惠"+"¥0.46" 两行 */
+    @Test
+    fun OCR_优惠页_拆行金额拼回且优惠金额不干扰实付() {
+        val lines = listOf("微信支付凭证", "¥", "14.14", "已优惠", "¥0.46", "收款方", "瑞幸咖啡")
+        val r = BillPageParser.parseOcr(lines)
+        assertEquals(1414L, r?.amountCents)
+        assertEquals("瑞幸咖啡", r?.merchant)
+    }
+
+    /** 优惠为单行 "已优惠¥0.46" 的形态 */
+    @Test
+    fun OCR_优惠页_单行优惠形态() {
+        val lines = listOf("微信支付凭证", "¥", "14.14", "已优惠¥0.46", "收款方", "瑞幸咖啡")
+        val r = BillPageParser.parseOcr(lines)
+        assertEquals(1414L, r?.amountCents)
+        assertEquals("瑞幸咖啡", r?.merchant)
+    }
+
+    /** 期望金额（通知侧实付）锚定：页面只要确认存在即采用，金额以通知为准 */
+    @Test
+    fun OCR_优惠页_期望金额锚定() {
+        val lines = listOf("支付成功", "¥14.14", "已优惠¥0.46", "付款给瑞幸咖啡")
+        val r = BillPageParser.parseOcr(lines, expectedAmountCents = 1414L)
+        assertEquals(1414L, r?.amountCents)
+        assertEquals("瑞幸咖啡", r?.merchant)
+    }
+
+    /** 无障碍树模式：优惠节点排在实付金额前面，也不能取到优惠金额 */
+    @Test
+    fun 树模式_优惠行在实付前_不误取优惠金额() {
+        val r = BillPageParser.parse(
+            listOf("支付成功", "已优惠¥0.46", "¥14.14", "收款方", "瑞幸咖啡")
+        )
+        assertEquals(1414L, r?.amountCents)
+    }
+
+    /** 树模式：期望金额锚定 */
+    @Test
+    fun 树模式_期望金额锚定() {
+        val r = BillPageParser.parse(
+            listOf("支付成功", "已优惠¥0.46", "¥14.14", "收款方", "瑞幸咖啡"),
+            expectedAmountCents = 1414L,
+        )
+        assertEquals(1414L, r?.amountCents)
+    }
+
+    /** 营销弹窗（"恭喜获得¥0.46红包"）没有强页面特征，不允许 OCR 凭空新建账单 */
+    @Test
+    fun OCR_营销弹窗_无强页面特征() {
+        val r = BillPageParser.parseOcr(listOf("恭喜获得", "¥0.46", "红包", "点击领取"))
+        assertEquals(false, r?.strongPage == true)
+    }
 }
 
 /** 通用规则：任何"单金额结果页"都应记录，多金额列表页一律拒绝 */

@@ -7,7 +7,7 @@ import kotlinx.coroutines.flow.first
 object EntryConfirmer {
 
     /** 商户取值：读屏补全过的（非泛称）优先，通知原文的再解析结果只做兜底 */
-    private fun resolveMerchant(
+    internal fun resolveMerchant(
         entry: PendingEntryEntity,
         freshMerchant: String?,
         generic: Set<String>,

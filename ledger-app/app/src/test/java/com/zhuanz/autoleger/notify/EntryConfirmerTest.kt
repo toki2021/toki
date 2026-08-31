@@ -8,6 +8,9 @@ import org.junit.Test
 /** 回归：读屏补全的商户不能在确认入库时被通知原文的再解析覆盖 */
 class EntryConfirmerTest {
 
+    // 真实泛称商户名单的取样（线上来自 MerchantFilters，单测用固定集）
+    private val generic = setOf("微信支付", "支付宝", "微信", "未知商户")
+
     private fun entry(merchant: String?) = PendingEntryEntity(
         packageName = "com.tencent.mm",
         title = "微信支付",
@@ -20,25 +23,25 @@ class EntryConfirmerTest {
 
     @Test
     fun 读屏补全的商户_优先于通知再解析() {
-        val m = EntryConfirmer.resolveMerchant(entry("tokizero"), freshMerchant = "微信支付")
+        val m = EntryConfirmer.resolveMerchant(entry("tokizero"), "微信支付", generic)
         assertEquals("tokizero", m)
     }
 
     @Test
     fun 没有补全时_用通知再解析结果() {
-        val m = EntryConfirmer.resolveMerchant(entry("微信支付"), freshMerchant = "瑞幸咖啡")
+        val m = EntryConfirmer.resolveMerchant(entry("微信支付"), "瑞幸咖啡", generic)
         assertEquals("瑞幸咖啡", m)
     }
 
     @Test
     fun 都没有时_为空() {
-        val m = EntryConfirmer.resolveMerchant(entry(null), freshMerchant = null)
+        val m = EntryConfirmer.resolveMerchant(entry(null), null, generic)
         assertEquals(null, m)
     }
 
     @Test
-    fun 编辑页预填_同样优先补全商户() {
-        val hint = EntryConfirmer.extractCategoryHint(entry("tokizero"))
-        assertEquals("tokizero", hint.merchant)
+    fun 补全的是泛称时_退回通知再解析结果() {
+        val m = EntryConfirmer.resolveMerchant(entry("微信支付"), "瑞幸咖啡", generic)
+        assertEquals("瑞幸咖啡", m)
     }
 }

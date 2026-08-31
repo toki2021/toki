@@ -3,6 +3,8 @@ package com.zhuanz.autoleger.notify
 import android.app.Notification
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
+import android.util.Log
+import com.zhuanz.autoleger.BuildConfig
 import com.zhuanz.autoleger.LedgerAppProvider
 import com.zhuanz.autoleger.data.PENDING_CONFIRM
 import com.zhuanz.autoleger.data.PENDING_UNPARSED
@@ -39,6 +41,10 @@ class PaymentNotificationListener : NotificationListenerService() {
         val extras = sbn.notification?.extras ?: return
         val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
         val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString().orEmpty()
+        // 隐私：通知原文（含商户名）只在 debug 包输出，release 一律不打
+        if (BuildConfig.DEBUG && (pkg == "com.tencent.mm" || pkg == "com.eg.android.AlipayGphone")) {
+            Log.d("PayNotify", "posted pkg=$pkg title=$title text=$text")
+        }
         if (!PaymentParser.looksLikePayment(pkg, title, text)) return
 
         val postedAt = sbn.postTime
