@@ -35,6 +35,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -193,7 +194,7 @@ fun TrendBarChart(daily: List<DayBar>, color: Color, modifier: Modifier = Modifi
         progress.animateTo(1f, tween(800, easing = FastOutSlowInEasing))
     }
     val maxCents = (daily.maxOfOrNull { it.cents } ?: 0L).coerceAtLeast(1)
-    val labelFmt = SimpleDateFormat("d", Locale.getDefault())
+    val labelColorArgb = MaterialTheme.colorScheme.onSurfaceVariant.toArgb()
     Canvas(modifier) {
         val n = daily.size
         if (n == 0) return@Canvas
@@ -210,10 +211,9 @@ fun TrendBarChart(daily: List<DayBar>, color: Color, modifier: Modifier = Modifi
             )
         }
         // 日期标签：只画 1 号、15 号、今天附近
-        val labelColor = androidx.compose.ui.graphics.Color.Gray
         drawContext.canvas.nativeCanvas.apply {
             val paint = android.graphics.Paint().apply {
-                this.color = android.graphics.Color.GRAY
+                this.color = labelColorArgb
                 textSize = 10.sp.toPx()
                 isAntiAlias = true
             }
@@ -238,6 +238,8 @@ fun CategoryDonut(data: List<CategorySum>, modifier: Modifier = Modifier) {
     val palette = categoryPalette()
     val total = data.sumOf { it.amountCents }.coerceAtLeast(1)
     val progress = remember { Animatable(0f) }
+    val labelColorArgb = MaterialTheme.colorScheme.onSurfaceVariant.toArgb()
+    val amountColorArgb = MaterialTheme.colorScheme.onSurface.toArgb()
     LaunchedEffect(data) {
         progress.snapTo(0f)
         progress.animateTo(1f, tween(900, easing = FastOutSlowInEasing))
@@ -263,13 +265,13 @@ fun CategoryDonut(data: List<CategorySum>, modifier: Modifier = Modifier) {
         // 中心总额
         drawContext.canvas.nativeCanvas.apply {
             val paint = android.graphics.Paint().apply {
-                color = android.graphics.Color.GRAY
+                color = labelColorArgb
                 textSize = 12.sp.toPx()
                 isAntiAlias = true
                 textAlign = android.graphics.Paint.Align.CENTER
             }
             drawText("本月支出", size.width / 2, size.height / 2 - 6.dp.toPx(), paint)
-            paint.color = android.graphics.Color.WHITE
+            paint.color = amountColorArgb
             paint.textSize = 20.sp.toPx()
             paint.isFakeBoldText = true
             drawText(

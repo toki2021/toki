@@ -17,6 +17,7 @@ import com.zhuanz.autoleger.data.PENDING_CONFIRM
 import com.zhuanz.autoleger.data.PendingEntryEntity
 import com.zhuanz.autoleger.data.SOURCE_NOTIFICATION
 import com.zhuanz.autoleger.data.TransactionEntity
+import com.zhuanz.autoleger.data.MerchantFilters
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -49,7 +50,6 @@ class BillReaderService : AccessibilityService() {
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val genericMerchants = setOf("微信支付", "支付宝", "未知商户", "已支付", "已付款")
 
     // 这些词出现在"商户名"里说明它其实是通知句式/按钮词（如"你有一笔 的支出"、"完成"），
     // 同样视为可补全对象
@@ -59,7 +59,7 @@ class BillReaderService : AccessibilityService() {
     )
 
     private fun isEnrichableMerchant(m: String?): Boolean =
-        m == null || m in genericMerchants || garbageWords.any { it in m }
+        m == null || m in MerchantFilters.genericMerchants(applicationContext) || garbageWords.any { it in m }
     private val handler = Handler(Looper.getMainLooper())
     private val textRecognizer by lazy {
         TextRecognition.getClient(ChineseTextRecognizerOptions.Builder().build())

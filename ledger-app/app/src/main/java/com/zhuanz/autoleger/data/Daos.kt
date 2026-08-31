@@ -27,6 +27,14 @@ interface TransactionDao {
 
     @Query("DELETE FROM transactions WHERE id = :id")
     suspend fun deleteById(id: Long)
+
+    /** 近期去重商户名（编辑页联想用），排除占位名，按最近使用排序，最多 limit 条 */
+    @Query(
+        "SELECT merchant FROM transactions " +
+            "WHERE merchant != '' AND merchant NOT IN (:excluded) " +
+            "GROUP BY merchant ORDER BY MAX(time) DESC LIMIT :limit"
+    )
+    fun observeRecentMerchants(limit: Int, excluded: List<String>): Flow<List<String>>
 }
 
 @Dao
@@ -66,6 +74,10 @@ interface RuleDao {
 interface PendingEntryDao {
     @Query("SELECT * FROM pending_entries ORDER BY time DESC")
     fun observeAll(): Flow<List<PendingEntryEntity>>
+
+    /** 待确认条数（导航角标用），避免拉全表 */
+    @Query("SELECT COUNT(*) FROM pending_entries")
+    fun observeCount(): Flow<Int>
 
     @Query("SELECT * FROM pending_entries WHERE id = :id")
     suspend fun getById(id: Long): PendingEntryEntity?

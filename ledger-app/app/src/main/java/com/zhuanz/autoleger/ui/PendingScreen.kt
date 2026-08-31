@@ -20,6 +20,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -41,7 +42,7 @@ fun PendingScreen(onConfirm: (Long) -> Unit) {
     val context = LocalContext.current
     val pending by container.pendingEntryDao.observeAll().collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
-    val fmt = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault())
+    val fmt = remember { SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()) }
 
     Scaffold(topBar = { TopAppBar(title = { Text("待处理通知") }) }) { padding ->
         if (pending.isEmpty()) {
@@ -61,7 +62,7 @@ fun PendingScreen(onConfirm: (Long) -> Unit) {
         } else {
             LazyColumn(Modifier.padding(padding).fillMaxSize()) {
                 items(pending, key = { it.id }) { entry ->
-                    val hint = EntryConfirmer.extractCategoryHint(entry)
+                    val hint = EntryConfirmer.extractCategoryHint(container, entry)
                     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {

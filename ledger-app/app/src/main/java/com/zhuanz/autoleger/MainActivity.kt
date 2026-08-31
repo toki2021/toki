@@ -1,6 +1,7 @@
 package com.zhuanz.autoleger
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -13,6 +14,8 @@ import com.zhuanz.autoleger.notify.ConfirmNotifier
 import com.zhuanz.autoleger.ui.AutoLedgerApp
 import com.zhuanz.autoleger.ui.UiVariant
 import com.zhuanz.autoleger.ui.UiVariantViewModel
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
 
 class MainActivity : ComponentActivity() {
 
@@ -24,6 +27,12 @@ class MainActivity : ComponentActivity() {
      * 因此这里对状态的修改会实时反映到 AutoLedgerTheme / AppNav / SettingsScreen。
      */
     private val uiVariantVm: UiVariantViewModel by viewModels()
+
+    /** 待确认 id 深链事件：onCreate / onNewIntent 转发给 Compose 导航 */
+    private val pendingDeepLinks = MutableSharedFlow<Long>(
+        extraBufferCapacity = 8,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -44,12 +53,23 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        val pendingIdFromIntent = intent?.getLongExtra(ConfirmNotifier.EXTRA_PENDING_ID, -1L) ?: -1L
         setContent {
             com.zhuanz.autoleger.ui.AutoLedgerTheme {
-                AutoLedgerApp(openPendingId = pendingIdFromIntent.takeIf { it > 0 })
+                AutoLedgerApp(deepLinkFlow = pendingDeepLinks)
             }
         }
+        handlePendingIntent(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handlePendingIntent(intent)
+    }
+
+    private fun handlePendingIntent(intent: Intent?) {
+        val pendingId = intent?.getLongExtra(ConfirmNotifier.EXTRA_PENDING_ID, -1L) ?: -1L
+        if (pendingId > 0) pendingDeepLinks.tryEmit(pendingId)
     }
 
     private fun requestPostNotificationsIfNeeded() {

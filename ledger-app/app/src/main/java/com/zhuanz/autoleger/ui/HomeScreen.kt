@@ -111,18 +111,25 @@ fun HomeScreen(
         }
     }
 
-    val cal = Calendar.getInstance()
-    // 先读"今天几号"再改动日历字段，否则恒为 1 导致日均错误
-    val dayOfMonth = cal.get(Calendar.DAY_OF_MONTH)
-    val todayStart = cal.apply {
-        set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0)
-        set(Calendar.MILLISECOND, 0)
-    }.timeInMillis
-    val monthStart = cal.apply { set(Calendar.DAY_OF_MONTH, 1) }.timeInMillis
+    // 日期边界只随进入页面计算一次，避免每次重组都 new Calendar + 改字段
+    val (todayStart, monthStart, dayOfMonth) = remember {
+        val cal = Calendar.getInstance()
+        // 先读"今天几号"再改动日历字段，否则恒为 1 导致日均错误
+        val dom = cal.get(Calendar.DAY_OF_MONTH)
+        val ts = cal.apply {
+            set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+        val ms = cal.apply { set(Calendar.DAY_OF_MONTH, 1) }.timeInMillis
+        Triple(ts, ms, dom)
+    }
 
-    val todayExpense = transactions.filter { it.time >= todayStart && it.type != "REFUND" }.sumOf { it.amountCents }
-    val monthExpense = transactions.filter { it.time >= monthStart && it.type != "REFUND" }.sumOf { it.amountCents }
-    val monthDailyAvg = monthExpense / dayOfMonth
+    val (todayExpense, monthExpense, monthDailyAvg) =
+        remember(transactions, todayStart, monthStart, dayOfMonth) {
+            val te = transactions.filter { it.time >= todayStart && it.type != "REFUND" }.sumOf { it.amountCents }
+            val me = transactions.filter { it.time >= monthStart && it.type != "REFUND" }.sumOf { it.amountCents }
+            Triple(te, me, me / dayOfMonth)
+        }
 
     // 按日分组（保持时间倒序）
     val dayKeyFmt = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()) }

@@ -49,13 +49,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.zhuanz.autoleger.LedgerAppProvider
 import com.zhuanz.autoleger.data.AppContainer
+import kotlinx.coroutines.flow.Flow
 
 object Routes {
     const val HOME = "home"
@@ -64,6 +67,7 @@ object Routes {
     const val CATEGORIES = "categories"
     const val STATS = "stats"
     const val SETTINGS = "settings"
+    const val EDIT = "edit/{txId}/{pendingId}"
     fun edit(txId: Long, pendingId: Long) = "edit/$txId/$pendingId"
 }
 
@@ -86,7 +90,7 @@ fun rememberContainer(): AppContainer =
     (LocalContext.current.applicationContext as LedgerAppProvider).container
 
 @Composable
-fun AutoLedgerApp(openPendingId: Long?) {
+fun AutoLedgerApp(deepLinkFlow: Flow<Long>) {
     val navController = rememberNavController()
     val backStack by navController.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route
@@ -95,10 +99,13 @@ fun AutoLedgerApp(openPendingId: Long?) {
     val variant = uiState.effective
     val context = LocalContext.current
     val container = rememberContainer()
-    val pendingCount by container.pendingEntryDao.observeAll().collectAsState(initial = emptyList())
+    val pendingCount by container.pendingEntryDao.observeCount().collectAsState(initial = 0)
 
-    LaunchedEffect(openPendingId) {
-        if (openPendingId != null) navController.navigate(Routes.edit(-1, openPendingId))
+    // 深链：onNewIntent/onCreate 转发的待确认 id → 跳转编辑页
+    LaunchedEffect(Unit) {
+        deepLinkFlow.collect { pendingId ->
+            navController.navigate(Routes.edit(-1, pendingId))
+        }
     }
 
     Box(Modifier.fillMaxSize()) {
@@ -112,7 +119,7 @@ fun AutoLedgerApp(openPendingId: Long?) {
                         UiVariant.C -> TintedNav(currentRoute) { route -> navSelect(navController, route) }
                         UiVariant.D -> FloatingDockNav(currentRoute) { route -> navSelect(navController, route) }
                         UiVariant.E -> TintedNav(currentRoute) { route -> navSelect(navController, route) }
-                        UiVariant.F -> MonoNav(currentRoute, pendingCount.size) { route -> navSelect(navController, route) }
+                        UiVariant.F -> MonoNav(currentRoute, pendingCount) { route -> navSelect(navController, route) }
                     }
                 }
             },
@@ -142,9 +149,15 @@ fun AutoLedgerApp(openPendingId: Long?) {
                 composable(Routes.CATEGORIES) {
                     CategoriesScreen(onBack = { navController.popBackStack() })
                 }
-                composable("edit/{txId}/{pendingId}") { entry ->
-                    val txId = entry.arguments?.getString("txId")?.toLongOrNull() ?: -1L
-                    val pendingId = entry.arguments?.getString("pendingId")?.toLongOrNull() ?: -1L
+                composable(
+                    route = Routes.EDIT,
+                    arguments = listOf(
+                        navArgument("txId") { type = NavType.LongType; defaultValue = -1L },
+                        navArgument("pendingId") { type = NavType.LongType; defaultValue = -1L },
+                    ),
+                ) { entry ->
+                    val txId = entry.arguments?.getLong("txId") ?: -1L
+                    val pendingId = entry.arguments?.getLong("pendingId") ?: -1L
                     EditEntryScreen(
                         txId = txId,
                         pendingId = pendingId,

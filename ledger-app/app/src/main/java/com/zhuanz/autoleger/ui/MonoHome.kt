@@ -59,19 +59,23 @@ fun MonoHome(
         categories.firstOrNull { it.id == tx.categoryId }?.name ?: "未分类"
     }
 
-    val cal = Calendar.getInstance()
-    val greeting = when (cal.get(Calendar.HOUR_OF_DAY)) {
-        in 0..11 -> "早上好"
-        in 12..13 -> "中午好"
-        in 14..17 -> "下午好"
-        else -> "晚上好"
+    val greeting = remember {
+        when (Calendar.getInstance().get(Calendar.HOUR_OF_DAY)) {
+            in 0..11 -> "早上好"
+            in 12..13 -> "中午好"
+            in 14..17 -> "下午好"
+            else -> "晚上好"
+        }
     }
 
     val dayKeyFmt = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()) }
     val dayHeaderFmt = remember { SimpleDateFormat("M月d日 EEEE", Locale.CHINA) }
     val timeFmt = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
 
-    val visible = transactions.filter { filter == null || catNameOf(it) == filter }
+    val visible = remember(transactions, categories, filter) {
+        val nameById = categories.associate { it.id to it.name }
+        transactions.filter { filter == null || (nameById[it.categoryId] ?: "未分类") == filter }
+    }
     val groups = remember(visible, dayKeyFmt) {
         visible
             .groupBy { dayKeyFmt.format(Date(it.time)) }

@@ -44,6 +44,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.zhuanz.autoleger.data.EntryConfirmer
+import com.zhuanz.autoleger.data.MerchantFilters
 import com.zhuanz.autoleger.data.SOURCE_MANUAL
 import com.zhuanz.autoleger.data.TransactionEntity
 import com.zhuanz.autoleger.data.TYPE_EXPENSE
@@ -67,15 +68,11 @@ fun EditEntryScreen(txId: Long, pendingId: Long, onDone: () -> Unit) {
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
     val categories by container.categoryDao.observeAll().collectAsState(initial = emptyList())
-    val transactions by container.transactionDao.observeAll().collectAsState(initial = emptyList())
 
-    // 历史常用商户，通知里没有商户名时一键补填
-    val recentMerchants = remember(transactions) {
-        transactions.map { it.merchant }
-            .filter { it.isNotBlank() && it != "未知商户" && it != "微信支付" && it != "支付宝" }
-            .distinct()
-            .take(8)
-    }
+    // 历史常用商户（DAO 层去重+排序+限量），排除泛称/占位商户名
+    val genericMerchants = remember { MerchantFilters.genericMerchants(context).toList() }
+    val recentMerchants by container.transactionDao.observeRecentMerchants(8, genericMerchants)
+        .collectAsState(initial = emptyList())
 
     var type by remember { mutableStateOf(TYPE_EXPENSE) }
     var amountText by remember { mutableStateOf("") }
@@ -99,7 +96,7 @@ fun EditEntryScreen(txId: Long, pendingId: Long, onDone: () -> Unit) {
                 loaded = true
             }
             pendingId > 0 -> container.pendingEntryDao.getById(pendingId)?.let { entry ->
-                val hint = EntryConfirmer.extractCategoryHint(entry)
+                val hint = EntryConfirmer.extractCategoryHint(container, entry)
                 hint.amountCents?.let { amountText = String.format("%.2f", it / 100.0) }
                 merchant = hint.merchant ?: ""
                 time = entry.time

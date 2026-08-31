@@ -45,7 +45,7 @@ val DEFAULT_CATEGORIES = listOf(
 
 /** 应用级依赖容器，单例持有数据库与仓库 */
 class AppContainer(context: Context) {
-    private val appContext = context.applicationContext
+    val appContext = context.applicationContext
     val db: AppDatabase = AppDatabase.build(context)
     val transactionDao = db.transactionDao()
     val categoryDao = db.categoryDao()
