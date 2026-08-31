@@ -11,12 +11,18 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -25,13 +31,14 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.zhuanz.autoleger.R
 import com.zhuanz.autoleger.data.EntryConfirmer
 import com.zhuanz.autoleger.data.PENDING_CONFIRM
+import com.zhuanz.autoleger.data.PendingEntryEntity
 import com.zhuanz.autoleger.notify.ConfirmNotifier
-import androidx.compose.ui.res.stringResource
-import com.zhuanz.autoleger.R
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -45,8 +52,12 @@ fun PendingScreen(onConfirm: (Long) -> Unit) {
     val pending by container.pendingEntryDao.observeAll().collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
     val fmt = remember { SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()) }
+    val snackbar = remember { SnackbarHostState() }
 
-    Scaffold(topBar = { TopAppBar(title = { Text(stringResource(R.string.pending_screen_title)) }) }) { padding ->
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbar) },
+        topBar = { TopAppBar(title = { Text(stringResource(R.string.pending_screen_title)) }) },
+    ) { padding ->
         if (pending.isEmpty()) {
             Column(
                 Modifier.padding(padding).fillMaxSize(),
@@ -82,6 +93,7 @@ fun PendingScreen(onConfirm: (Long) -> Unit) {
                                 )
                             }
                             if (entry.status == PENDING_CONFIRM) {
+                                ReRecognizeButton(entry, scope, snackbar)
                                 Button(onClick = {
                                     scope.launch {
                                         if (EntryConfirmer.confirm(container, entry)) {
@@ -93,6 +105,7 @@ fun PendingScreen(onConfirm: (Long) -> Unit) {
                                 Spacer(Modifier.width(8.dp))
                                 OutlinedButton(onClick = { onConfirm(entry.id) }) { Text(stringResource(R.string.pending_edit)) }
                             } else {
+                                ReRecognizeButton(entry, scope, snackbar)
                                 TextButton(onClick = { onConfirm(entry.id) }) { Text(stringResource(R.string.pending_manual)) }
                             }
                             TextButton(onClick = {
@@ -106,5 +119,40 @@ fun PendingScreen(onConfirm: (Long) -> Unit) {
                 }
             }
         }
+    }
+}
+
+/**
+ * "重新识别"：用当前解析逻辑重解析通知原文，修正库里存的金额/商户并重发确认通知。
+ * 解析逻辑升级后（如优惠金额专项修复），历史识别错的条目点一下即可修正，无需手动改。
+ */
+@Composable
+private fun ReRecognizeButton(
+    entry: PendingEntryEntity,
+    scope: kotlinx.coroutines.CoroutineScope,
+    snackbar: SnackbarHostState,
+) {
+    val container = rememberContainer()
+    val context = LocalContext.current
+    IconButton(onClick = {
+        scope.launch {
+            val msg = when (val r = EntryConfirmer.reRecognize(container, entry)) {
+                is EntryConfirmer.ReRecognizeResult.Updated -> {
+                    val e = r.entry
+                    val label = "¥%.2f".format((e.amountCents ?: 0L) / 100.0) +
+                        (e.merchant?.let { " · $it" } ?: "")
+                    context.getString(R.string.pending_rerecognize_done, label)
+                }
+                EntryConfirmer.ReRecognizeResult.NoChange ->
+                    context.getString(R.string.pending_rerecognize_nochange)
+            }
+            snackbar.showSnackbar(msg)
+        }
+    }) {
+        Icon(
+            Icons.Filled.Refresh,
+            contentDescription = stringResource(R.string.pending_rerecognize),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }

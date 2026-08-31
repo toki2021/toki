@@ -63,6 +63,9 @@
     <string name="pending_edit">改</string>
     <string name="pending_manual">补录</string>
     <string name="pending_discard">删</string>
+    <string name="pending_rerecognize">重新识别</string>
+    <string name="pending_rerecognize_done">已更新：%1$s</string>
+    <string name="pending_rerecognize_nochange">原文解析不出新信息</string>
 
     <!-- 分类管理页 -->
     <string name="category_manage_title">分类管理</string>
