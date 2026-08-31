@@ -1,10 +1,15 @@
 package com.zhuanz.autoleger.notify
 
+import com.zhuanz.autoleger.data.toCents
+
 /**
  * 从微信/支付宝的支付通知里启发式地解析金额、商户名和类型（支出/退款）。
  *
  * 通知文案没有官方格式保证，解析失败时条目会进入"待处理（未解析）"列表，
  * 由用户手动补录，因此这里宁可解析保守也不猜错。
+ *
+ * 「金额文本 → 分」的公共实现放在 [com.zhuanz.autoleger.data.toCents]，
+ * 解析层与 UI 层统一走 BigDecimal 路径，避免 double 精度损失。
  */
 object PaymentParser {
 
@@ -49,8 +54,8 @@ object PaymentParser {
 
     private fun parseAmount(text: String): Long? {
         val m = amountWithSymbol.find(text) ?: amountWithYuan.find(text) ?: return null
-        val yuan = m.groupValues[1].toDoubleOrNull() ?: return null
-        return Math.round(yuan * 100)
+        // BigDecimal 精确换算，避免 Math.round(yuan * 100) 的 double 精度损失
+        return m.groupValues[1].toCents()
     }
 
     private fun parseMerchant(title: String, text: String): String {

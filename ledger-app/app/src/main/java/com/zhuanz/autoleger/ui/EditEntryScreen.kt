@@ -48,6 +48,7 @@ import com.zhuanz.autoleger.data.SOURCE_MANUAL
 import com.zhuanz.autoleger.data.TransactionEntity
 import com.zhuanz.autoleger.data.TYPE_EXPENSE
 import com.zhuanz.autoleger.data.TYPE_REFUND
+import com.zhuanz.autoleger.data.toCents
 import com.zhuanz.autoleger.notify.ConfirmNotifier
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -197,7 +198,8 @@ fun EditEntryScreen(txId: Long, pendingId: Long, onDone: () -> Unit) {
 
             Button(
                 onClick = {
-                    val cents = (amountText.toDoubleOrNull() ?: 0.0).let { Math.round(it * 100) }
+                    // BigDecimal 精确换算，避免 Math.round(amount * 100) 的 double 精度损失
+                    val cents = amountText.toCents() ?: 0L
                     if (cents <= 0) return@Button
                     scope.launch {
                         when {

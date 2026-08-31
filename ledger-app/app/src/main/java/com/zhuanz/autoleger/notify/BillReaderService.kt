@@ -11,6 +11,7 @@ import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.Text
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.chinese.ChineseTextRecognizerOptions
+import com.zhuanz.autoleger.BuildConfig
 import com.zhuanz.autoleger.LedgerAppProvider
 import com.zhuanz.autoleger.data.PENDING_CONFIRM
 import com.zhuanz.autoleger.data.PendingEntryEntity
@@ -19,6 +20,7 @@ import com.zhuanz.autoleger.data.TransactionEntity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
@@ -69,10 +71,12 @@ class BillReaderService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = this
-        Log.d(TAG, "connected, capabilities=${serviceInfo.capabilities}")
+        if (BuildConfig.DEBUG) Log.d(TAG, "connected, capabilities=${serviceInfo.capabilities}")
     }
 
     override fun onDestroy() {
+        scope.cancel()
+        handler.removeCallbacks(readRunnable)
         if (instance === this) instance = null
         super.onDestroy()
     }
@@ -165,7 +169,7 @@ class BillReaderService : AccessibilityService() {
             walkNode(r, texts, 0)
             if (texts.isNotEmpty()) return texts
         }
-        Log.d(TAG, "tree: no window for $targetPkg")
+        if (BuildConfig.DEBUG) Log.d(TAG, "tree: no window for $targetPkg")
         return emptyList()
     }
 
@@ -192,24 +196,25 @@ class BillReaderService : AccessibilityService() {
                                         .flatMap { it.lines }
                                         .map { it.text.trim() }
                                         .filter { it.isNotBlank() }
-                                    Log.d(TAG, "ocr lines=${lines.size}: ${lines.joinToString("|").take(300)}")
+                                    // 隐私：release 下绝不输出 OCR 文本内容（含商户名等敏感信息）
+                                    if (BuildConfig.DEBUG) Log.d(TAG, "ocr lines=${lines.size}: ${lines.joinToString("|").take(300)}")
                                     soft.recycle()
                                     if (cont.isActive) cont.resume(BillPageParser.parseOcr(lines))
                                 }
                                 .addOnFailureListener { e ->
-                                    Log.d(TAG, "ocr fail: ${e.message}")
+                                    if (BuildConfig.DEBUG) Log.d(TAG, "ocr fail: ${e.message}")
                                     soft.recycle()
                                     if (cont.isActive) cont.resume(null)
                                 }
                         }
 
                         override fun onFailure(errorCode: Int) {
-                            Log.d(TAG, "screenshot fail: $errorCode")
+                            if (BuildConfig.DEBUG) Log.d(TAG, "screenshot fail: $errorCode")
                             if (cont.isActive) cont.resume(null)
                         }
                     })
             } catch (e: Exception) {
-                Log.d(TAG, "screenshot error: ${e.message}")
+                if (BuildConfig.DEBUG) Log.d(TAG, "screenshot error: ${e.message}")
                 if (cont.isActive) cont.resume(null)
             }
         }

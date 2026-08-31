@@ -52,6 +52,9 @@ class AppContainer(context: Context) {
     val ruleDao = db.ruleDao()
     val pendingEntryDao = db.pendingEntryDao()
 
+    /** 交易仓库：ViewModel 应通过它而非 DAO 直接读写 */
+    val transactionRepository: TransactionRepository = TransactionRepository(transactionDao)
+
     /** 首次启动写入默认分类 */
     suspend fun seedDefaultCategoriesIfNeeded() {
         if (categoryDao.count() == 0) {

@@ -9,6 +9,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /** 处理确认通知上的【入账】/【忽略】按钮 */
 class ConfirmActionReceiver : BroadcastReceiver() {
@@ -22,12 +23,15 @@ class ConfirmActionReceiver : BroadcastReceiver() {
         val result = goAsync()
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             try {
-                val entry = container.pendingEntryDao.getById(pendingId) ?: return@launch
-                if (action == ConfirmNotifier.ACTION_CONFIRM) {
-                    EntryConfirmer.confirm(container, entry)
+                // goAsync 最多持有约 10s，留 8s 上限兜底，超时直接结束
+                withTimeoutOrNull(8_000L) {
+                    val entry = container.pendingEntryDao.getById(pendingId) ?: return@withTimeoutOrNull
+                    if (action == ConfirmNotifier.ACTION_CONFIRM) {
+                        EntryConfirmer.confirm(container, entry)
+                    }
+                    ConfirmNotifier.cancel(context, pendingId)
+                    container.pendingEntryDao.deleteById(pendingId)
                 }
-                ConfirmNotifier.cancel(context, pendingId)
-                container.pendingEntryDao.deleteById(pendingId)
             } finally {
                 result.finish()
             }

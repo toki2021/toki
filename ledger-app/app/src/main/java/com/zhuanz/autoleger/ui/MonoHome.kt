@@ -51,7 +51,7 @@ fun MonoHome(
     avgExpense: Long,
     onEdit: (Long) -> Unit,
     onStats: () -> Unit,
-    onDelete: (Long) -> Unit,
+    onDelete: (TransactionEntity) -> Unit,
     onAdd: () -> Unit,
 ) {
     var filter by remember { mutableStateOf<String?>(null) }
@@ -232,7 +232,7 @@ fun MonoHome(
                                 categoryName = catNameOf(tx),
                                 dateText = timeFmt.format(Date(tx.time)),
                                 onClick = { onEdit(tx.id) },
-                                onDelete = { onDelete(tx.id) },
+                                onDelete = { onDelete(tx) },
                             )
                             HorizontalDivider(
                                 color = MaterialTheme.colorScheme.outlineVariant,
@@ -254,7 +254,7 @@ private fun MonoRow(
     categoryName: String,
     dateText: String,
     onClick: () -> Unit,
-    onDelete: (Long) -> Unit,
+    onDelete: (TransactionEntity) -> Unit,
 ) {
     val isRefund = tx.type == "REFUND"
     Row(
@@ -281,7 +281,7 @@ private fun MonoRow(
         Spacer(Modifier.width(12.dp))
         Text(
             "✕",
-            modifier = Modifier.clickable { onDelete(tx.id) },
+            modifier = Modifier.clickable { onDelete(tx) },
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 13.sp,
         )

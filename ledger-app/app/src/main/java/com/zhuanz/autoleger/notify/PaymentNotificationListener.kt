@@ -10,6 +10,7 @@ import com.zhuanz.autoleger.data.PendingEntryEntity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -23,6 +24,11 @@ import kotlinx.coroutines.sync.withLock
 class PaymentNotificationListener : NotificationListenerService() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    override fun onDestroy() {
+        scope.cancel()
+        super.onDestroy()
+    }
 
     // 去重检查与入库必须串行：两条相同通知并发回调时，不加锁会双双通过去重检查
     private val insertMutex = Mutex()

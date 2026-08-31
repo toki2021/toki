@@ -5,7 +5,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.graphics.Color
+import androidx.lifecycle.viewmodel.compose.viewModel
 
 // 设计 token：整套颜色集中在这里，深浅两套自动切换，页面代码只引用 colorScheme 角色
 
@@ -138,8 +141,12 @@ private val MonoDarkColors = darkColorScheme(
 )
 
 @Composable
-fun AutoLedgerTheme(content: @Composable () -> Unit) {
-    val colorScheme = when (UiVariantState.effective) {
+fun AutoLedgerTheme(
+    vm: UiVariantViewModel = viewModel(),
+    content: @Composable () -> Unit,
+) {
+    val state by vm.uiState.collectAsState()
+    val colorScheme = when (state.effective) {
         UiVariant.D -> NightColors
         UiVariant.E -> WarmLightColors
         UiVariant.F -> if (isSystemInDarkTheme()) MonoDarkColors else MonoLightColors

@@ -23,6 +23,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -36,11 +37,16 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import androidx.core.app.NotificationManagerCompat
+import androidx.lifecycle.viewmodel.compose.viewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen() {
+fun SettingsScreen(
+    uiVariantVm: UiVariantViewModel = viewModel(),
+) {
     val context = LocalContext.current
+    // 与 AppNav/Theme 共享同一 Activity 级实例，选择实时生效
+    val uiVariantState by uiVariantVm.uiState.collectAsState()
     val listenerEnabled by produceState(initialValue = false, key1 = context) {
         value = NotificationManagerCompat.getEnabledListenerPackages(context)
             .contains(context.packageName)
@@ -67,7 +73,7 @@ fun SettingsScreen() {
                 Text("界面风格", style = MaterialTheme.typography.titleMedium)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        UiVariantState.current.label,
+                        uiVariantState.current.label,
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.SemiBold,
@@ -88,20 +94,20 @@ fun SettingsScreen() {
                         fontWeight = FontWeight.SemiBold,
                         modifier = Modifier
                             .clip(androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
-                            .clickable { UiVariantState.setPreview(true) }
+                            .clickable { uiVariantVm.setPreview(true) }
                             .padding(vertical = 6.dp),
                     )
                     UiVariant.entries.forEach { v ->
                         Row(
                             Modifier
                                 .fillMaxWidth()
-                                .clickable { UiVariantState.apply(context, v) }
+                                .clickable { uiVariantVm.apply(context, v) }
                                 .padding(vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             androidx.compose.material3.RadioButton(
-                                selected = UiVariantState.current == v,
-                                onClick = { UiVariantState.apply(context, v) },
+                                selected = uiVariantState.current == v,
+                                onClick = { uiVariantVm.apply(context, v) },
                             )
                             Text(v.label, style = MaterialTheme.typography.bodyMedium)
                         }

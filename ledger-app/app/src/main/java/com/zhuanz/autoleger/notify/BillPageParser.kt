@@ -1,5 +1,7 @@
 package com.zhuanz.autoleger.notify
 
+import com.zhuanz.autoleger.data.toCents
+
 /**
  * 解析微信/支付宝账单页面的文本。
  *
@@ -59,9 +61,10 @@ object BillPageParser {
         val markers = if (fromOcr) ocrMarkers else pageMarkers
         if (texts.none { t -> markers.any { m -> t.contains(m) } }) return null
         val joined = texts.joinToString(" ")
-        val amount = amountRe.find(joined)?.groupValues?.get(1)
-            ?.replace(",", "")?.toDoubleOrNull() ?: return null
-        val amountCents = Math.round(amount * 100)
+        val amountText = amountRe.find(joined)?.groupValues?.get(1)
+            ?.replace(",", "") ?: return null
+        // BigDecimal 精确换算，避免 Math.round(amount * 100) 的 double 精度损失
+        val amountCents = amountText.toCents() ?: return null
         if (amountCents <= 0) return null
 
         val merchant = extractMerchant(texts) ?: return null
@@ -106,8 +109,8 @@ object BillPageParser {
 
     /** 只提取商户；金额好办，商户才是读屏的价值所在 */
     private fun ocrAmountToCents(line: String): Long? =
-        amountRe.find(line)?.groupValues?.get(1)?.replace(",", "")?.toDoubleOrNull()
-            ?.let { Math.round(it * 100) }?.takeIf { it > 0 }
+        amountRe.find(line)?.groupValues?.get(1)?.replace(",", "")
+            ?.toCents()?.takeIf { it > 0 }
 
     /** OCR 行是否像商户/对象名：拒绝金额、时间日期、噪声词、纯数字符号 */
     private fun ocrCandidateMerchant(s: String): String? {

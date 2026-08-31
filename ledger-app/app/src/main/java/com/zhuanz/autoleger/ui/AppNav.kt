@@ -53,6 +53,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.zhuanz.autoleger.LedgerAppProvider
 import com.zhuanz.autoleger.data.AppContainer
 
@@ -89,7 +90,9 @@ fun AutoLedgerApp(openPendingId: Long?) {
     val navController = rememberNavController()
     val backStack by navController.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route
-    val variant = UiVariantState.effective
+    val vm: UiVariantViewModel = viewModel()
+    val uiState by vm.uiState.collectAsState()
+    val variant = uiState.effective
     val context = LocalContext.current
     val container = rememberContainer()
     val pendingCount by container.pendingEntryDao.observeAll().collectAsState(initial = emptyList())
@@ -154,7 +157,7 @@ fun AutoLedgerApp(openPendingId: Long?) {
             }
 
             // —— 预览模式悬浮控制条 ——
-            if (UiVariantState.previewing) {
+            if (uiState.previewing) {
                 Row(
                     Modifier
                         .align(Alignment.TopCenter)
@@ -172,12 +175,12 @@ fun AutoLedgerApp(openPendingId: Long?) {
                         fontSize = 18.sp,
                         modifier = Modifier.clickable {
                             val entries = UiVariant.entries
-                            val i = entries.indexOf(UiVariantState.previewVariant)
-                            UiVariantState.previewVariant = entries[(i - 1 + entries.size) % entries.size]
+                            val i = entries.indexOf(uiState.previewVariant)
+                            vm.setPreviewVariant(entries[(i - 1 + entries.size) % entries.size])
                         },
                     )
                     Text(
-                        "预览 · " + UiVariantState.previewVariant.label,
+                        "预览 · " + uiState.previewVariant.label,
                         color = MaterialTheme.colorScheme.inverseOnSurface,
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 14.sp,
@@ -188,8 +191,8 @@ fun AutoLedgerApp(openPendingId: Long?) {
                         fontSize = 18.sp,
                         modifier = Modifier.clickable {
                             val entries = UiVariant.entries
-                            val i = entries.indexOf(UiVariantState.previewVariant)
-                            UiVariantState.previewVariant = entries[(i + 1) % entries.size]
+                            val i = entries.indexOf(uiState.previewVariant)
+                            vm.setPreviewVariant(entries[(i + 1) % entries.size])
                         },
                     )
                     Text(
@@ -197,12 +200,12 @@ fun AutoLedgerApp(openPendingId: Long?) {
                         color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.Bold,
                         fontSize = 14.sp,
-                        modifier = Modifier.clickable { UiVariantState.confirmPreview(context) },
+                        modifier = Modifier.clickable { vm.confirmPreview(context) },
                     )
                     Text(
                         "✕",
                         color = MaterialTheme.colorScheme.inverseOnSurface,
-                        modifier = Modifier.clickable { UiVariantState.cancelPreview() },
+                        modifier = Modifier.clickable { vm.cancelPreview() },
                     )
                 }
             }

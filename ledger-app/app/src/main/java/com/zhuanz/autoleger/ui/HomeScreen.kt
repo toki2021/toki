@@ -31,7 +31,13 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -45,8 +51,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
+import com.zhuanz.autoleger.data.AppContainer
 import com.zhuanz.autoleger.data.TransactionEntity
-import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -59,15 +69,47 @@ data class DayGroup(
     val items: List<TransactionEntity>,
 )
 
+/** 用 AppContainer 构造 HomeViewModel 的工厂（Activity 级共享） */
+@Composable
+private fun homeViewModel(container: AppContainer): HomeViewModel {
+    val factory = remember(container) {
+        viewModelFactory {
+            initializer { HomeViewModel(container) }
+        }
+    }
+    return viewModel(factory = factory)
+}
+
 @Composable
 fun HomeScreen(
     onEdit: (Long) -> Unit,
     onStats: () -> Unit,
+    vm: UiVariantViewModel = viewModel(),
 ) {
+    val uiState by vm.uiState.collectAsState()
     val container = rememberContainer()
+    val homeVm = homeViewModel(container)
     val transactions by container.transactionDao.observeAll().collectAsState(initial = emptyList())
     val categories by container.categoryDao.observeAll().collectAsState(initial = emptyList())
     var showAddSheet by rememberSaveable { mutableStateOf(false) }
+
+    // 删除确认 Dialog 的显示状态由 homeVm.pendingDeleteTx 驱动
+    var showDeleteDialog by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    // 收集删除事件：弹出 Undo Snackbar
+    LaunchedEffect(Unit) {
+        homeVm.undoEvents.collect { deletedTx ->
+            val result = snackbarHostState.showSnackbar(
+                message = "已删除「${deletedTx.merchant}」",
+                actionLabel = "撤销",
+                withDismissAction = true,
+            )
+            if (result == SnackbarResult.ActionPerformed) {
+                homeVm.undo(deletedTx)
+            }
+        }
+    }
 
     val cal = Calendar.getInstance()
     // 先读"今天几号"再改动日历字段，否则恒为 1 导致日均错误
@@ -99,7 +141,7 @@ fun HomeScreen(
     }
 
     // 方案 F · 简约卡片风：独立布局
-    if (UiVariantState.effective == UiVariant.F) {
+    if (uiState.effective == UiVariant.F) {
         Column(Modifier.background(MaterialTheme.colorScheme.background)) {
             MonoHome(
                 transactions = transactions,
@@ -109,18 +151,33 @@ fun HomeScreen(
                 avgExpense = monthDailyAvg,
                 onEdit = onEdit,
                 onStats = onStats,
-                onDelete = { scope_delete(it, container) },
+                onDelete = {
+                    homeVm.requestDelete(it)
+                    showDeleteDialog = true
+                },
                 onAdd = { showAddSheet = true },
             )
         }
         if (showAddSheet) {
             AddEntrySheet(onDismiss = { showAddSheet = false })
         }
+        DeleteConfirmDialog(
+            visible = showDeleteDialog,
+            onDismiss = {
+                showDeleteDialog = false
+                homeVm.clearPendingDelete()
+            },
+            onConfirm = {
+                showDeleteDialog = false
+                homeVm.confirmDelete()
+            },
+        )
         return
     }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 onClick = { showAddSheet = true },
@@ -135,7 +192,7 @@ fun HomeScreen(
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
             // —— 摘要区（三套方案三种头部，点击 A/C 进入统计）——
-            when (UiVariantState.effective) {
+            when (uiState.effective) {
                 UiVariant.A -> GradientHeroHeader(monthExpense, todayExpense, monthDailyAvg, onStats)
                 UiVariant.B -> LargeTitleHeader(monthExpense, todayExpense, monthDailyAvg)
                 UiVariant.C -> CompactHeader(monthExpense, todayExpense, monthDailyAvg)
@@ -167,7 +224,8 @@ fun HomeScreen(
                                 dateText = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(tx.time)),
                                 onClick = { onEdit(tx.id) },
                                 onDelete = {
-                                    scope_delete(tx.id, container)
+                                    homeVm.requestDelete(tx)
+                                    showDeleteDialog = true
                                 },
                             )
                         }
@@ -181,15 +239,38 @@ fun HomeScreen(
     if (showAddSheet) {
         AddEntrySheet(onDismiss = { showAddSheet = false })
     }
+    DeleteConfirmDialog(
+        visible = showDeleteDialog,
+        onDismiss = {
+            showDeleteDialog = false
+            homeVm.clearPendingDelete()
+        },
+        onConfirm = {
+            showDeleteDialog = false
+            homeVm.confirmDelete()
+        },
+    )
 }
 
-// 事务删除：投递到 IO 协程执行
-private val deleteScope = kotlinx.coroutines.CoroutineScope(
-    kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO
-)
-
-private fun scope_delete(txId: Long, container: com.zhuanz.autoleger.data.AppContainer) {
-    deleteScope.launch { container.transactionDao.deleteById(txId) }
+/** 删除前的确认对话框（visible 时显示） */
+@Composable
+private fun DeleteConfirmDialog(
+    visible: Boolean,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    if (!visible) return
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("删除账单") },
+        text = { Text("确定要删除这条账单吗？删除后可在提示条中撤销。") },
+        confirmButton = {
+            TextButton(onClick = onConfirm) { Text("删除") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("取消") }
+        },
+    )
 }
 
 @Composable
