@@ -75,6 +75,8 @@ class PaymentNotificationListener : NotificationListenerService() {
                 time = postedAt,
             )
             val id = container.pendingEntryDao.insert(entry)
+            // 启动流动云胶囊（ColorOS 摄像头位置显示"¥14.14 待确认"）
+            FluidCloudService.start(applicationContext)
             // 静默捕获：只记金额时不弹窗（避免骚扰），读到商户时才由读屏侧弹出确认
             val popup = applicationContext.getSharedPreferences("settings", MODE_PRIVATE)
                 .getBoolean("notify_popup_generic", false)
