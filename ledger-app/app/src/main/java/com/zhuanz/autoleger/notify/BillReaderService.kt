@@ -13,6 +13,7 @@ import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.chinese.ChineseTextRecognizerOptions
 import com.zhuanz.autoleger.BuildConfig
 import com.zhuanz.autoleger.LedgerAppProvider
+import com.zhuanz.autoleger.data.AppContainer
 import com.zhuanz.autoleger.data.PENDING_CONFIRM
 import com.zhuanz.autoleger.data.PendingEntryEntity
 import com.zhuanz.autoleger.data.SOURCE_NOTIFICATION
@@ -43,8 +44,13 @@ class BillReaderService : AccessibilityService() {
         @Volatile var instance: BillReaderService? = null
             private set
 
-        /** 通知监听在创建待确认条目后调用，触发一次截屏识别 */
-        fun requestCapture() {
+        /** 本次 OCR 的目标待补全条目 id：由通知监听精确指定，OCR 结果只补这一条，避免错配 */
+        @Volatile var targetPendingId: Long? = null
+            private set
+
+        /** 通知监听在创建待确认条目后调用，触发一次截屏识别，并精确绑定目标条目 */
+        fun requestCapture(pendingId: Long? = null) {
+            targetPendingId = pendingId
             instance?.scheduleRead(1500)
         }
     }
@@ -101,7 +107,7 @@ class BillReaderService : AccessibilityService() {
             var bill = if (texts.isEmpty()) null else BillPageParser.parse(texts)
             if (bill != null) {
                 retries = 0
-                handleBill(bill, fromOcr = false)
+                handleBill(bill, fromOcr = false, targetPendingId)
                 return@launch
             }
             // 引擎二：截屏 OCR。仅当窗口树几乎为空时（H5 页面的特征，
@@ -115,7 +121,7 @@ class BillReaderService : AccessibilityService() {
             if (bill != null) {
                 retries = 0
                 // OCR 模式只补全已有记录，不凭空建账（避免把账单列表页等误识别成新账单）
-                handleBill(bill, fromOcr = true)
+                handleBill(bill, fromOcr = true, targetPendingId)
                 return@launch
             }
             if (retries < 8) {
@@ -234,31 +240,38 @@ class BillReaderService : AccessibilityService() {
         }
     }
 
-    private suspend fun handleBill(bill: BillPageParser.Bill, fromOcr: Boolean = false) {
+    private suspend fun handleBill(
+        bill: BillPageParser.Bill,
+        fromOcr: Boolean = false,
+        targetPendingId: Long? = null,
+    ) {
         val container = (applicationContext as LedgerAppProvider).container
         val now = System.currentTimeMillis()
 
-        // 1) 10 分钟内有同金额待确认条目 → 补全它的商户并重发确认通知
-        val pending = container.pendingEntryDao.observeAll().first()
-            .firstOrNull {
-                it.amountCents == bill.amountCents && now - it.time < 10 * 60_000L
+        // 0) 目标待补全条目精确关联：通知监听刚创建的那条。
+        //    只补这一条，绝不因为"金额相同"就去覆盖别的记录——这是同金额多笔记账错配的来源。
+        if (targetPendingId != null) {
+            val target = container.pendingEntryDao.getById(targetPendingId)
+            val contentPkg = rootInActiveWindow?.packageName?.toString()
+            if (target != null && targetMatches(target, bill, contentPkg)) {
+                enrichPending(container, target, bill, now)
             }
-        if (pending != null) {
-            if (pending.merchant != bill.merchant) {
-                container.pendingEntryDao.insert(
-                    pending.copy(merchant = bill.merchant, status = PENDING_CONFIRM)
-                )
-                ConfirmNotifier.postConfirmNotification(
-                    applicationContext, pending.id,
-                    PaymentParser.Parsed(bill.amountCents, bill.merchant, isRefund = false),
-                    now,
-                )
-            }
+            clearTarget(targetPendingId)
             return
         }
 
-        // 2) 30 分钟内有同金额、商户是泛称的通知入账 → 直接补全。
-        //    金额必须唯一：同金额有多笔时无法确定是哪笔，宁可不改也不能错配/重复。
+        // 1) 10 分钟内同金额且金额唯一的待确认条目 → 补全商户。
+        //    金额相同但有多条待确认时无法确定是哪笔，宁可不补（宁可少记）
+        val pendingMatches = container.pendingEntryDao.observeAll().first().filter {
+            it.amountCents == bill.amountCents && now - it.time < 10 * 60_000L
+        }
+        if (pendingMatches.size == 1) {
+            enrichPending(container, pendingMatches.first(), bill, now)
+            return
+        }
+
+        // 2) 30 分钟内同金额、商户是泛称、来源为通知的已入账 → 直接补全。
+        //    金额必须唯一：同金额多笔无法确定是哪笔，宁可不改也不能错配/重复
         val candidates = container.transactionDao.observeAll().first().filter {
             it.amountCents == bill.amountCents &&
                 now - it.time < 30 * 60_000L &&
@@ -267,10 +280,11 @@ class BillReaderService : AccessibilityService() {
         }
         val tx = candidates.singleOrNull()
         if (tx != null) {
-            val category = container.matchCategory(bill.merchant)
+            val merchant = captureMerchant(bill) ?: return
+            val category = container.matchCategory(merchant)
             container.transactionDao.update(
                 tx.copy(
-                    merchant = bill.merchant,
+                    merchant = merchant,
                     categoryId = category?.id ?: tx.categoryId,
                 )
             )
@@ -297,5 +311,50 @@ class BillReaderService : AccessibilityService() {
             PaymentParser.Parsed(bill.amountCents, bill.merchant, isRefund = false),
             now,
         )
+    }
+
+    /** 目标条目是否匹配本次 OCR：金额未解析的可由 OCR 补全，已解析的须金额一致、来源一致 */
+    private fun targetMatches(
+        target: PendingEntryEntity,
+        bill: BillPageParser.Bill,
+        contentPkg: String?,
+    ): Boolean =
+        (target.amountCents == null || target.amountCents == bill.amountCents) &&
+            (contentPkg == null || contentPkg == "unknown" || target.packageName == contentPkg)
+
+    /** OCR 读回我们自己的确认通知横幅（含"入账/确认/点按"等按钮词）属于反向污染，丢弃 */
+    private fun captureMerchant(bill: BillPageParser.Bill): String? {
+        val m = bill.merchant
+        if (m.isNullOrBlank()) return null
+        if (listOf("入账", "入帐", "确认", "点按", "撤销", "忽略").any { it in m }) return null
+        return m
+    }
+
+    /** 用 OCR 结果补全一条待确认条目（商户 + 未解析时的金额），并重发确认通知 */
+    private suspend fun enrichPending(
+        container: AppContainer,
+        pending: PendingEntryEntity,
+        bill: BillPageParser.Bill,
+        now: Long,
+    ) {
+        val merchant = captureMerchant(bill) ?: return
+        val amount = pending.amountCents ?: bill.amountCents
+        if (pending.merchant == merchant && pending.amountCents == amount) return
+        container.pendingEntryDao.insert(
+            pending.copy(
+                merchant = merchant,
+                amountCents = amount,
+                status = PENDING_CONFIRM,
+            )
+        )
+        ConfirmNotifier.postConfirmNotification(
+            applicationContext, pending.id,
+            PaymentParser.Parsed(amount, merchant, isRefund = pending.text.contains("退款")),
+            now,
+        )
+    }
+
+    private fun clearTarget(id: Long?) {
+        if (targetPendingId == id) targetPendingId = null
     }
 }

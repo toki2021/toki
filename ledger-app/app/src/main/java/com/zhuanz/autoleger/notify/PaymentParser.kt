@@ -111,13 +111,34 @@ object PaymentParser {
     private val exclusionRegex =
         Regex(merchantExclusions.joinToString("|") { Regex.escape(it) })
 
+    /** 营销/事件/非支出类通知特征词，命中即不作为支出入账（宁可少记，不可错记） */
+    private val nonPaymentNoise = listOf(
+        "失效", "过期", "红包", "立减", "满减", "优惠", "优惠券", "折扣", "活动",
+        "促销", "福利", "积分", "签到", "抽奖", "提醒", "敬请",
+        "送达", "配送", "取餐", "外卖", "到店", "排队", "评价", "售后", "退款原路",
+        "余额", "免密", "自动扣款", "扣款提醒", "还款提醒", "还款日", "额度",
+        "签约", "解约", "登录", "异地", "账单提醒",
+        "下单成功", "订单已提交", "已下单", "预约",
+    )
+
+    /** 明确的"已发生支出/转账/退款"句式，命中才放行入账 */
+    private val paidSignals = listOf(
+        "支付成功", "付款成功", "已支付", "已付款", "支付完成", "付款完成",
+        "成功支付", "交易成功", "扣款成功", "已扣款",
+        "转账成功", "已转账", "退款成功", "已退款", "退款完成",
+    )
+
     /** 是否疑似支付/收款类通知（用于粗过滤其他 App 通知） */
     fun looksLikePayment(packageName: String, title: String, text: String): Boolean {
         val isKnownApp = packageName in setOf("com.tencent.mm", "com.eg.android.AlipayGphone")
         if (!isKnownApp) return false
         val full = "$title $text"
         if (full.contains("验证码") || full.contains("登录确认")) return false
-        val paymentHint = listOf("支付", "付款", "退款", "收款", "转账", "扣款", "¥", "￥", "元")
-        return paymentHint.any { it in full }
+        // 营销/事件/非支出的通知明确排除，哪怕带了金额（红包失效、多笔立减、外卖送达等）
+        if (nonPaymentNoise.any { it in full }) return false
+        // 不能只因为文案里碰巧有"支付/元/¥"就入账，必须是明确的支付/转账/退款信号，
+        // 或"向 XX 转账/付款"句式；其余的一律进不了待处理，避免乱入账。
+        if (paidSignals.any { it in full }) return true
+        return transferTo.containsMatchIn(full)
     }
 }

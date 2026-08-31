@@ -75,13 +75,14 @@ class PaymentNotificationListener : NotificationListenerService() {
             if (parsed != null && popup) {
                 ConfirmNotifier.postConfirmNotification(applicationContext, id, parsed, postedAt)
             }
-            // 支付结果页此刻正在弹出，触发截屏 OCR 读取商户并补全
+            // 支付结果页此刻正在弹出，触发截屏 OCR 读取商户并补全。
+            // 把"待补全的目标"精确绑定到刚创建的这条 pending，避免连续多条通知时错配到别的账上
             if (parsed != null) {
                 // 读屏服务被系统清理时（进程活着但服务已解绑），提醒用户一键恢复
                 if (BillReaderService.instance == null) {
                     ReaderOfflineNotifier.postIfNeeded(applicationContext)
                 }
-                BillReaderService.requestCapture()
+                BillReaderService.requestCapture(id)
             }
             }
         }
