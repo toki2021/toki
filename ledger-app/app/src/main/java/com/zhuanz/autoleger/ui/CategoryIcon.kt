@@ -10,7 +10,7 @@ import androidx.compose.material.icons.rounded.DirectionsTransit
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.MedicalServices
 import androidx.compose.material.icons.rounded.PhoneIphone
-import androidx.compose.material.icons.rounded.ReceiptLong
+import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
 import androidx.compose.material.icons.rounded.Restaurant
 import androidx.compose.material.icons.rounded.ShoppingBag
 import androidx.compose.material.icons.rounded.SportsEsports
@@ -67,7 +67,7 @@ object CategoryIconMapper {
 
     fun specFor(name: String): Spec =
         specs.firstOrNull { s -> s.keywords.any { name.contains(it) } }
-            ?: Spec(emptyList(), Icons.Rounded.ReceiptLong, fallback)
+            ?: Spec(emptyList(), Icons.AutoMirrored.Rounded.ReceiptLong, fallback)
 
     fun iconFor(name: String): ImageVector = specFor(name).icon
 

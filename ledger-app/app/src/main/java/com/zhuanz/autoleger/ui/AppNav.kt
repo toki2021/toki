@@ -20,13 +20,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.outlined.Email as EmailOutline
 import androidx.compose.material.icons.outlined.Home as HomeOutline
-import androidx.compose.material.icons.outlined.List as ListOutline
+import androidx.compose.material.icons.automirrored.outlined.List as ListOutline
 import androidx.compose.material.icons.outlined.Settings as SettingsOutline
 import androidx.compose.runtime.collectAsState
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.offset
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -81,7 +81,7 @@ private data class NavItem(
 private val navItems = listOf(
     NavItem("首页", Icons.Filled.Home, Icons.Outlined.HomeOutline, Routes.HOME),
     NavItem("待处理", Icons.Filled.Email, Icons.Outlined.EmailOutline, Routes.PENDING),
-    NavItem("规则", Icons.Filled.List, Icons.Outlined.ListOutline, Routes.RULES),
+    NavItem("规则", Icons.AutoMirrored.Filled.List, Icons.AutoMirrored.Outlined.ListOutline, Routes.RULES),
     NavItem("设置", Icons.Filled.Settings, Icons.Outlined.SettingsOutline, Routes.SETTINGS),
 )
 
