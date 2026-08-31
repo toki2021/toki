@@ -38,6 +38,8 @@ import androidx.compose.ui.unit.sp
 import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.ui.res.stringResource
+import com.zhuanz.autoleger.R
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -59,7 +61,7 @@ fun SettingsScreen(
         onPauseOrDispose { }
     }
 
-    Scaffold(topBar = { TopAppBar(title = { Text("设置") }) }) { padding ->
+    Scaffold(topBar = { TopAppBar(title = { Text(stringResource(R.string.nav_settings)) }) }) { padding ->
         Column(
             Modifier
                 .padding(padding)
@@ -77,7 +79,7 @@ fun SettingsScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("界面风格", style = MaterialTheme.typography.titleMedium)
+                Text(stringResource(R.string.settings_ui_style), style = MaterialTheme.typography.titleMedium)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         uiVariantState.current.label,
@@ -95,7 +97,7 @@ fun SettingsScreen(
             androidx.compose.animation.AnimatedVisibility(visible = styleExpanded) {
                 Column {
                     Text(
-                        "预览界面方案",
+                        stringResource(R.string.settings_preview_variants),
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.SemiBold,
@@ -122,18 +124,20 @@ fun SettingsScreen(
                 }
             }
             HorizontalDivider(Modifier.padding(vertical = 16.dp))
-            Text("通知监听权限", style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.settings_notification_permission), style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(4.dp))
             Text(
-                if (listenerEnabled) "✅ 已授权，可以监听微信/支付宝的支付通知"
-                else "❌ 未授权。授权后 App 才能收到支付通知并生成待确认账单。",
+                stringResource(
+                    if (listenerEnabled) R.string.settings_notification_granted
+                    else R.string.settings_notification_denied
+                ),
                 fontSize = 13.sp,
             )
             if (!listenerEnabled) {
                 Button(
                     onClick = { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) },
                     modifier = Modifier.padding(top = 8.dp),
-                ) { Text("去系统设置授权") }
+                ) { Text(stringResource(R.string.settings_grant_notification)) }
             }
             HorizontalDivider(Modifier.padding(vertical = 16.dp))
             val prefs = context.getSharedPreferences("settings", android.content.Context.MODE_PRIVATE)
@@ -141,7 +145,7 @@ fun SettingsScreen(
                 mutableStateOf(prefs.getBoolean("notify_popup_generic", false))
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("金额通知也弹确认窗", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+                Text(stringResource(R.string.settings_popup_generic), Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
                 androidx.compose.material3.Switch(
                     checked = genericPopup,
                     onCheckedChange = {
@@ -151,43 +155,42 @@ fun SettingsScreen(
                 )
             }
             Text(
-                "关闭（推荐）：支付通知只悄悄记下金额不弹窗，等读屏读到商户后才弹确认通知。\n开启：收到支付通知立刻弹确认（只有金额，商户需要手动补）。",
+                stringResource(R.string.settings_popup_generic_desc),
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             HorizontalDivider(Modifier.padding(vertical = 16.dp))
-            Text("读屏补全商户（无障碍）", style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.settings_accessibility), style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(4.dp))
             Text(
-                if (readerEnabled) "✅ 已开启。打开微信/支付宝账单详情页时自动读取收款方，补全商户和分类。"
-                else "❌ 未开启。开启后，打开账单详情页会自动读取收款方商户（通知里通常只有金额）。仅读取账单页，不收集其他内容。",
+                stringResource(
+                    if (readerEnabled) R.string.settings_reader_enabled
+                    else R.string.settings_reader_disabled
+                ),
                 fontSize = 13.sp,
             )
             if (!readerEnabled) {
                 Button(
                     onClick = { context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) },
                     modifier = Modifier.padding(top = 8.dp),
-                ) { Text("去系统设置开启") }
+                ) { Text(stringResource(R.string.settings_grant_accessibility)) }
             }
             HorizontalDivider(Modifier.padding(vertical = 16.dp))
-            Text("数据与备份", style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.settings_data_backup), style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(4.dp))
-            Text("账目数据仅保存在本机。WebDAV 云备份将在 V1.3 提供。", fontSize = 13.sp)
+            Text(stringResource(R.string.settings_data_backup_desc), fontSize = 13.sp)
             HorizontalDivider(Modifier.padding(vertical = 16.dp))
-            Text("隐私说明", style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.settings_privacy), style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(4.dp))
             Text(
-                "本 App 仅在你授权后，于本机解析微信/支付宝的支付通知与账单详情页：\n" +
-                    "· 通知监听只处理支付相关通知，不读取其他内容；\n" +
-                    "· 读屏/截屏只在你打开账单详情页且存在待补全账单时短暂触发，识别结果（商户/金额）即用即删，截图不落盘；\n" +
-                    "· 所有账目与识别数据仅保存在本机，不上传任何服务器。",
+                stringResource(R.string.settings_privacy_desc),
                 fontSize = 13.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             HorizontalDivider(Modifier.padding(vertical = 16.dp))
-            Text("关于", style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.settings_about), style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(4.dp))
-            Text("自动记账 V1.0 · 通知监听 → 确认入账 → 自动分类", fontSize = 13.sp)
+            Text(stringResource(R.string.settings_about_desc), fontSize = 13.sp)
         }
     }
 }

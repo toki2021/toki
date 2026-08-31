@@ -37,6 +37,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.zhuanz.autoleger.data.CategoryEntity
+import androidx.compose.ui.res.stringResource
+import com.zhuanz.autoleger.R
 import kotlinx.coroutines.launch
 
 /** 按 Unicode 码点截断，避免把多字符 emoji（国旗/肤色/ZWJ 组合）截成乱码 */
@@ -62,17 +64,17 @@ fun CategoriesScreen(onBack: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("分类管理") },
+                title = { Text(stringResource(R.string.category_manage_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.common_back))
                     }
                 },
             )
         },
         floatingActionButton = {
             FloatingActionButton(onClick = { showAdd = true }) {
-                Icon(Icons.Filled.Add, contentDescription = "新增分类")
+                Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.category_add))
             }
         }
     ) { padding ->
@@ -86,7 +88,7 @@ fun CategoriesScreen(onBack: () -> Unit) {
                     Spacer(Modifier.width(12.dp))
                     Text(cat.name, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
                     IconButton(onClick = { scope.launch { container.categoryDao.delete(cat) } }) {
-                        Icon(Icons.Filled.Delete, contentDescription = "删除分类")
+                        Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.category_delete))
                     }
                 }
             }
@@ -98,11 +100,11 @@ fun CategoriesScreen(onBack: () -> Unit) {
         var emoji by remember { mutableStateOf("") }
         AlertDialog(
             onDismissRequest = { showAdd = false },
-            title = { Text("新增分类") },
+            title = { Text(stringResource(R.string.category_add)) },
             text = {
                 Column {
-                    Text("图标将按分类名自动匹配", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("名称") }, singleLine = true, modifier = Modifier.padding(top = 8.dp))
+                    Text(stringResource(R.string.category_add_hint), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text(stringResource(R.string.category_name)) }, singleLine = true, modifier = Modifier.padding(top = 8.dp))
                     Spacer(Modifier.height(4.dp))
                 }
             },
@@ -117,9 +119,9 @@ fun CategoriesScreen(onBack: () -> Unit) {
                         }
                     },
                     enabled = name.isNotBlank(),
-                ) { Text("保存") }
+                ) { Text(stringResource(R.string.common_save)) }
             },
-            dismissButton = { TextButton(onClick = { showAdd = false }) { Text("取消") } },
+            dismissButton = { TextButton(onClick = { showAdd = false }) { Text(stringResource(R.string.common_cancel)) } },
         )
     }
 }

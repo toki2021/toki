@@ -30,6 +30,8 @@ import androidx.compose.ui.unit.sp
 import com.zhuanz.autoleger.data.EntryConfirmer
 import com.zhuanz.autoleger.data.PENDING_CONFIRM
 import com.zhuanz.autoleger.notify.ConfirmNotifier
+import androidx.compose.ui.res.stringResource
+import com.zhuanz.autoleger.R
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -44,16 +46,16 @@ fun PendingScreen(onConfirm: (Long) -> Unit) {
     val scope = rememberCoroutineScope()
     val fmt = remember { SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()) }
 
-    Scaffold(topBar = { TopAppBar(title = { Text("待处理通知") }) }) { padding ->
+    Scaffold(topBar = { TopAppBar(title = { Text(stringResource(R.string.pending_screen_title)) }) }) { padding ->
         if (pending.isEmpty()) {
             Column(
                 Modifier.padding(padding).fillMaxSize(),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Spacer(Modifier.weight(1f))
-                Text("没有待处理的通知")
+                Text(stringResource(R.string.pending_empty))
                 Text(
-                    "收到微信/支付宝支付通知后会出现在这里\n解析成功的还会弹确认通知，点「入账」即可",
+                    stringResource(R.string.pending_empty_desc),
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -87,18 +89,18 @@ fun PendingScreen(onConfirm: (Long) -> Unit) {
                                             container.pendingEntryDao.deleteById(entry.id)
                                         }
                                     }
-                                }) { Text("入账") }
+                                }) { Text(stringResource(R.string.pending_confirm)) }
                                 Spacer(Modifier.width(8.dp))
-                                OutlinedButton(onClick = { onConfirm(entry.id) }) { Text("改") }
+                                OutlinedButton(onClick = { onConfirm(entry.id) }) { Text(stringResource(R.string.pending_edit)) }
                             } else {
-                                TextButton(onClick = { onConfirm(entry.id) }) { Text("补录") }
+                                TextButton(onClick = { onConfirm(entry.id) }) { Text(stringResource(R.string.pending_manual)) }
                             }
                             TextButton(onClick = {
                                 scope.launch {
                                     ConfirmNotifier.cancel(context, entry.id)
                                     container.pendingEntryDao.deleteById(entry.id)
                                 }
-                            }) { Text("删") }
+                            }) { Text(stringResource(R.string.pending_discard)) }
                         }
                     }
                 }

@@ -56,7 +56,12 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.annotation.StringRes
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import com.zhuanz.autoleger.LedgerAppProvider
+import com.zhuanz.autoleger.R
 import com.zhuanz.autoleger.data.AppContainer
 import kotlinx.coroutines.flow.Flow
 
@@ -72,17 +77,17 @@ object Routes {
 }
 
 private data class NavItem(
-    val label: String,
+    @StringRes val labelRes: Int,
     val icon: ImageVector,
     val outlined: ImageVector,
     val route: String,
 )
 
 private val navItems = listOf(
-    NavItem("首页", Icons.Filled.Home, Icons.Outlined.HomeOutline, Routes.HOME),
-    NavItem("待处理", Icons.Filled.Email, Icons.Outlined.EmailOutline, Routes.PENDING),
-    NavItem("规则", Icons.AutoMirrored.Filled.List, Icons.AutoMirrored.Outlined.ListOutline, Routes.RULES),
-    NavItem("设置", Icons.Filled.Settings, Icons.Outlined.SettingsOutline, Routes.SETTINGS),
+    NavItem(R.string.nav_home, Icons.Filled.Home, Icons.Outlined.HomeOutline, Routes.HOME),
+    NavItem(R.string.nav_pending, Icons.Filled.Email, Icons.Outlined.EmailOutline, Routes.PENDING),
+    NavItem(R.string.nav_rules, Icons.AutoMirrored.Filled.List, Icons.AutoMirrored.Outlined.ListOutline, Routes.RULES),
+    NavItem(R.string.nav_settings, Icons.Filled.Settings, Icons.Outlined.SettingsOutline, Routes.SETTINGS),
 )
 
 @Composable
@@ -171,6 +176,10 @@ fun AutoLedgerApp(deepLinkFlow: Flow<Long>) {
 
             // —— 预览模式悬浮控制条 ——
             if (uiState.previewing) {
+                val prevLabel = stringResource(R.string.preview_prev)
+                val nextLabel = stringResource(R.string.preview_next)
+                val applyLabel = stringResource(R.string.preview_apply)
+                val closeLabel = stringResource(R.string.preview_close)
                 Row(
                     Modifier
                         .align(Alignment.TopCenter)
@@ -186,11 +195,13 @@ fun AutoLedgerApp(deepLinkFlow: Flow<Long>) {
                         "◀",
                         color = MaterialTheme.colorScheme.inverseOnSurface,
                         fontSize = 18.sp,
-                        modifier = Modifier.clickable {
-                            val entries = UiVariant.entries
-                            val i = entries.indexOf(uiState.previewVariant)
-                            vm.setPreviewVariant(entries[(i - 1 + entries.size) % entries.size])
-                        },
+                        modifier = Modifier
+                            .semantics { contentDescription = prevLabel }
+                            .clickable {
+                                val entries = UiVariant.entries
+                                val i = entries.indexOf(uiState.previewVariant)
+                                vm.setPreviewVariant(entries[(i - 1 + entries.size) % entries.size])
+                            },
                     )
                     Text(
                         "预览 · " + uiState.previewVariant.label,
@@ -202,23 +213,29 @@ fun AutoLedgerApp(deepLinkFlow: Flow<Long>) {
                         "▶",
                         color = MaterialTheme.colorScheme.inverseOnSurface,
                         fontSize = 18.sp,
-                        modifier = Modifier.clickable {
-                            val entries = UiVariant.entries
-                            val i = entries.indexOf(uiState.previewVariant)
-                            vm.setPreviewVariant(entries[(i + 1) % entries.size])
-                        },
+                        modifier = Modifier
+                            .semantics { contentDescription = nextLabel }
+                            .clickable {
+                                val entries = UiVariant.entries
+                                val i = entries.indexOf(uiState.previewVariant)
+                                vm.setPreviewVariant(entries[(i + 1) % entries.size])
+                            },
                     )
                     Text(
-                        "✓ 用这套",
+                        "✓ " + applyLabel,
                         color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.Bold,
                         fontSize = 14.sp,
-                        modifier = Modifier.clickable { vm.confirmPreview(context) },
+                        modifier = Modifier
+                            .semantics { contentDescription = applyLabel }
+                            .clickable { vm.confirmPreview(context) },
                     )
                     Text(
                         "✕",
                         color = MaterialTheme.colorScheme.inverseOnSurface,
-                        modifier = Modifier.clickable { vm.cancelPreview() },
+                        modifier = Modifier
+                            .semantics { contentDescription = closeLabel }
+                            .clickable { vm.cancelPreview() },
                     )
                 }
             }
@@ -256,6 +273,7 @@ private fun FloatingDockNav(currentRoute: String?, onSelect: (String) -> Unit) {
         ) {
             navItems.forEach { item ->
                 val selected = currentRoute == item.route
+                val label = stringResource(item.labelRes)
                 Column(
                     Modifier
                         .weight(1f)
@@ -270,17 +288,17 @@ private fun FloatingDockNav(currentRoute: String?, onSelect: (String) -> Unit) {
                                 .background(MaterialTheme.colorScheme.primary),
                             contentAlignment = Alignment.Center,
                         ) {
-                            Icon(item.icon, item.label, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(20.dp))
+                            Icon(item.icon, label, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(20.dp))
                         }
                         Text(
-                            item.label,
+                            label,
                             fontSize = 10.sp,
                             color = MaterialTheme.colorScheme.primary,
                             fontWeight = FontWeight.SemiBold,
                         )
                     } else {
                         Icon(
-                            item.icon, item.label,
+                            item.icon, label,
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(24.dp),
                         )
@@ -304,6 +322,7 @@ private fun PillNav(currentRoute: String?, onSelect: (String) -> Unit) {
         Row(Modifier.fillMaxWidth().height(70.dp), verticalAlignment = Alignment.CenterVertically) {
             navItems.forEach { item ->
                 val selected = currentRoute == item.route
+                val label = stringResource(item.labelRes)
                 Column(
                     Modifier
                         .weight(1f)
@@ -322,14 +341,14 @@ private fun PillNav(currentRoute: String?, onSelect: (String) -> Unit) {
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Icon(
-                            item.icon, item.label,
+                            item.icon, label,
                             tint = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
                             else MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(22.dp),
                         )
                         if (selected) {
                             Text(
-                                item.label,
+                                label,
                                 Modifier.padding(start = 6.dp),
                                 fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -361,6 +380,7 @@ private fun TintedNav(currentRoute: String?, onSelect: (String) -> Unit) {
         ) {
             navItems.forEach { item ->
                 val selected = currentRoute == item.route
+                val label = stringResource(item.labelRes)
                 Row(
                     Modifier
                         .clip(RoundedCornerShape(16.dp))
@@ -373,14 +393,14 @@ private fun TintedNav(currentRoute: String?, onSelect: (String) -> Unit) {
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Icon(
-                        item.icon, item.label,
+                        item.icon, label,
                         tint = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
                         else MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(22.dp),
                     )
                     if (selected) {
                         Text(
-                            item.label,
+                            label,
                             Modifier.padding(start = 6.dp),
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
@@ -410,6 +430,7 @@ private fun MonoNav(currentRoute: String?, badge: Int, onSelect: (String) -> Uni
         ) {
             navItems.forEach { item ->
                 val selected = currentRoute == item.route
+                val label = stringResource(item.labelRes)
                 Column(
                     Modifier
                         .weight(1f)
@@ -420,7 +441,7 @@ private fun MonoNav(currentRoute: String?, badge: Int, onSelect: (String) -> Uni
                     Box {
                         Icon(
                             if (selected) item.icon else item.outlined,
-                            contentDescription = item.label,
+                            contentDescription = label,
                             tint = if (selected) MaterialTheme.colorScheme.onSurface
                             else MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(24.dp),
@@ -445,7 +466,7 @@ private fun MonoNav(currentRoute: String?, badge: Int, onSelect: (String) -> Uni
                     }
                     Spacer(Modifier.height(2.dp))
                     Text(
-                        item.label,
+                        label,
                         fontSize = 10.sp,
                         color = if (selected) MaterialTheme.colorScheme.onSurface
                         else MaterialTheme.colorScheme.onSurfaceVariant,

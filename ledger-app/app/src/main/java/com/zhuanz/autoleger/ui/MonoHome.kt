@@ -36,6 +36,10 @@ import androidx.compose.ui.unit.sp
 import com.zhuanz.autoleger.data.AppContainer
 import com.zhuanz.autoleger.data.CategoryEntity
 import com.zhuanz.autoleger.data.TransactionEntity
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import com.zhuanz.autoleger.R
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -55,18 +59,20 @@ fun MonoHome(
     onAdd: () -> Unit,
 ) {
     var filter by remember { mutableStateOf<String?>(null) }
+    val uncategorizedLabel = stringResource(R.string.category_uncategorized)
     val catNameOf: (TransactionEntity) -> String = { tx ->
-        categories.firstOrNull { it.id == tx.categoryId }?.name ?: "未分类"
+        categories.firstOrNull { it.id == tx.categoryId }?.name ?: uncategorizedLabel
     }
 
-    val greeting = remember {
+    val greetingRes = remember {
         when (Calendar.getInstance().get(Calendar.HOUR_OF_DAY)) {
-            in 0..11 -> "早上好"
-            in 12..13 -> "中午好"
-            in 14..17 -> "下午好"
-            else -> "晚上好"
+            in 0..11 -> R.string.greeting_morning
+            in 12..13 -> R.string.greeting_noon
+            in 14..17 -> R.string.greeting_afternoon
+            else -> R.string.greeting_evening
         }
     }
+    val greeting = stringResource(greetingRes)
 
     val dayKeyFmt = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()) }
     val dayHeaderFmt = remember { SimpleDateFormat("M月d日 EEEE", Locale.CHINA) }
@@ -74,7 +80,7 @@ fun MonoHome(
 
     val visible = remember(transactions, categories, filter) {
         val nameById = categories.associate { it.id to it.name }
-        transactions.filter { filter == null || (nameById[it.categoryId] ?: "未分类") == filter }
+        transactions.filter { filter == null || (nameById[it.categoryId] ?: uncategorizedLabel) == filter }
     }
     val groups = remember(visible, dayKeyFmt) {
         visible
@@ -119,12 +125,12 @@ fun MonoHome(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        "本月支出",
+                        stringResource(R.string.stats_month_expense),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Text(
-                        "统计 ›",
+                        stringResource(R.string.mono_stats),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.SemiBold,
@@ -137,7 +143,11 @@ fun MonoHome(
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "今日 ¥${"%,.2f".format(todayExpense / 100.0)}   ·   日均 ¥${"%,.2f".format(avgExpense / 100.0)}",
+                    stringResource(
+                        R.string.home_today_avg,
+                        "%,.2f".format(todayExpense / 100.0),
+                        "%,.2f".format(avgExpense / 100.0),
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -151,7 +161,7 @@ fun MonoHome(
                     .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                FilterPill("全部", filter == null) { filter = null }
+                FilterPill(stringResource(R.string.mono_all), filter == null) { filter = null }
                 categories.forEach { c ->
                     FilterPill(c.name, filter == c.name) { filter = c.name }
                 }
@@ -163,10 +173,10 @@ fun MonoHome(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("账单明细", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.mono_detail), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        "${visible.size} 笔",
+                        stringResource(R.string.mono_count, visible.size),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -180,7 +190,7 @@ fun MonoHome(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            "＋ 记一笔",
+                            stringResource(R.string.mono_add_entry),
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onPrimary,
                             fontWeight = FontWeight.SemiBold,
@@ -198,7 +208,7 @@ fun MonoHome(
             if (groups.isEmpty()) {
                 item {
                     Text(
-                        "没有符合条件的账单",
+                        stringResource(R.string.mono_empty),
                         Modifier.padding(vertical = 40.dp),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -261,6 +271,7 @@ private fun MonoRow(
     onDelete: (TransactionEntity) -> Unit,
 ) {
     val isRefund = tx.type == "REFUND"
+    val deleteLabel = stringResource(R.string.common_delete)
     Row(
         Modifier
             .fillMaxWidth()
@@ -273,7 +284,7 @@ private fun MonoRow(
         Column(Modifier.weight(1f)) {
             Text(tx.merchant, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
             Text(
-                categoryName + " · " + dateText + if (tx.source == "CSV") " · 导入" else "",
+                categoryName + " · " + dateText + if (tx.source == "CSV") stringResource(R.string.common_imported) else "",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -285,7 +296,9 @@ private fun MonoRow(
         Spacer(Modifier.width(12.dp))
         Text(
             "✕",
-            modifier = Modifier.clickable { onDelete(tx) },
+            modifier = Modifier
+                .clickable { onDelete(tx) }
+                .semantics { contentDescription = deleteLabel },
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 13.sp,
         )

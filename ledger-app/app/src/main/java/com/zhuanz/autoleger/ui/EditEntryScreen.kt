@@ -51,6 +51,8 @@ import com.zhuanz.autoleger.data.TYPE_EXPENSE
 import com.zhuanz.autoleger.data.TYPE_REFUND
 import com.zhuanz.autoleger.data.toCents
 import com.zhuanz.autoleger.notify.ConfirmNotifier
+import androidx.compose.ui.res.stringResource
+import com.zhuanz.autoleger.R
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -118,11 +120,13 @@ fun EditEntryScreen(txId: Long, pendingId: Long, onDone: () -> Unit) {
     Scaffold(topBar = {
         TopAppBar(title = {
             Text(
-                when {
-                    txId > 0 -> "编辑账单"
-                    pendingId > 0 -> "确认入账"
-                    else -> "记一笔"
-                }
+                stringResource(
+                    when {
+                        txId > 0 -> R.string.title_edit_entry
+                        pendingId > 0 -> R.string.title_confirm_entry
+                        else -> R.string.title_add_entry
+                    }
+                )
             )
         })
     }) { padding ->
@@ -136,18 +140,18 @@ fun EditEntryScreen(txId: Long, pendingId: Long, onDone: () -> Unit) {
                     selected = type == TYPE_EXPENSE,
                     onClick = { type = TYPE_EXPENSE },
                     shape = SegmentedButtonDefaults.itemShape(0, 2),
-                ) { Text("支出") }
+                ) { Text(stringResource(R.string.type_expense)) }
                 SegmentedButton(
                     selected = type == TYPE_REFUND,
                     onClick = { type = TYPE_REFUND },
                     shape = SegmentedButtonDefaults.itemShape(1, 2),
-                ) { Text("退款") }
+                ) { Text(stringResource(R.string.type_refund)) }
             }
 
             OutlinedTextField(
                 value = amountText,
                 onValueChange = { amountText = it.filter { c -> c.isDigit() || c == '.' } },
-                label = { Text("金额（元）") },
+                label = { Text(stringResource(R.string.field_amount)) },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
             )
@@ -158,7 +162,7 @@ fun EditEntryScreen(txId: Long, pendingId: Long, onDone: () -> Unit) {
                     merchant = it
                     categoryId = null
                 },
-                label = { Text("商户 / 备注") },
+                label = { Text(stringResource(R.string.field_merchant)) },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
             )
@@ -181,7 +185,7 @@ fun EditEntryScreen(txId: Long, pendingId: Long, onDone: () -> Unit) {
                 }
             }
 
-            Text("分类", style = MaterialTheme.typography.titleSmall)
+            Text(stringResource(R.string.field_category), style = MaterialTheme.typography.titleSmall)
             FlowChips(
                 items = categories,
                 selectedId = categoryId,
@@ -241,7 +245,7 @@ fun EditEntryScreen(txId: Long, pendingId: Long, onDone: () -> Unit) {
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
-            ) { Text("保存") }
+            ) { Text(stringResource(R.string.common_save)) }
         }
     }
 
@@ -262,9 +266,9 @@ fun EditEntryScreen(txId: Long, pendingId: Long, onDone: () -> Unit) {
                     }
                     showDatePicker = false
                     showTimePicker = true
-                }) { Text("下一步") }
+                }) { Text(stringResource(R.string.common_next)) }
             },
-            dismissButton = { TextButton(onClick = { showDatePicker = false }) { Text("取消") } },
+            dismissButton = { TextButton(onClick = { showDatePicker = false }) { Text(stringResource(R.string.common_cancel)) } },
         ) { DatePicker(state = state) }
     }
 
@@ -286,9 +290,9 @@ fun EditEntryScreen(txId: Long, pendingId: Long, onDone: () -> Unit) {
                     }
                     time = newCal.timeInMillis
                     showTimePicker = false
-                }) { Text("确定") }
+                }) { Text(stringResource(R.string.common_confirm)) }
             },
-            dismissButton = { TextButton(onClick = { showTimePicker = false }) { Text("取消") } },
+            dismissButton = { TextButton(onClick = { showTimePicker = false }) { Text(stringResource(R.string.common_cancel)) } },
             text = { TimePicker(state = state) },
         )
     }

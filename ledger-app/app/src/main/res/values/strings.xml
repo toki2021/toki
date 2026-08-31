@@ -1,4 +1,129 @@
 <resources>
     <string name="app_name">自动记账</string>
     <string name="bill_reader_desc">打开微信/支付宝的账单详情页时，读取收款方商户名，自动补全对应的待确认账单。仅在检测到账单详情页时读取，不上传任何数据。</string>
+
+    <!-- 通用 -->
+    <string name="common_save">保存</string>
+    <string name="common_cancel">取消</string>
+    <string name="common_delete">删除</string>
+    <string name="common_confirm">确定</string>
+    <string name="common_next">下一步</string>
+    <string name="common_back">返回</string>
+    <string name="common_undo">撤销</string>
+    <string name="common_imported"> · 导入</string>
+
+    <!-- 底部导航 -->
+    <string name="nav_home">首页</string>
+    <string name="nav_pending">待处理</string>
+    <string name="nav_rules">规则</string>
+    <string name="nav_settings">设置</string>
+
+    <!-- 预览切换条（可访问性描述） -->
+    <string name="preview_prev">上一个样式</string>
+    <string name="preview_next">下一个样式</string>
+    <string name="preview_apply">用这套</string>
+    <string name="preview_close">关闭预览</string>
+
+    <!-- 设置页 -->
+    <string name="settings_ui_style">界面风格</string>
+    <string name="settings_preview_variants">预览界面方案</string>
+    <string name="settings_notification_permission">通知监听权限</string>
+    <string name="settings_notification_granted">✅ 已授权，可以监听微信/支付宝的支付通知</string>
+    <string name="settings_notification_denied">❌ 未授权。授权后 App 才能收到支付通知并生成待确认账单。</string>
+    <string name="settings_grant_notification">去系统设置授权</string>
+    <string name="settings_popup_generic">金额通知也弹确认窗</string>
+    <string name="settings_popup_generic_desc">关闭（推荐）：支付通知只悄悄记下金额不弹窗，等读屏读到商户后才弹确认通知。\n开启：收到支付通知立刻弹确认（只有金额，商户需要手动补）。</string>
+    <string name="settings_accessibility">读屏补全商户（无障碍）</string>
+    <string name="settings_reader_enabled">✅ 已开启。打开微信/支付宝账单详情页时自动读取收款方，补全商户和分类。</string>
+    <string name="settings_reader_disabled">❌ 未开启。开启后，打开账单详情页会自动读取收款方商户（通知里通常只有金额）。仅读取账单页，不收集其他内容。</string>
+    <string name="settings_grant_accessibility">去系统设置开启</string>
+    <string name="settings_data_backup">数据与备份</string>
+    <string name="settings_data_backup_desc">账目数据仅保存在本机。WebDAV 云备份将在 V1.3 提供。</string>
+    <string name="settings_privacy">隐私说明</string>
+    <string name="settings_privacy_desc">本 App 仅在你授权后，于本机解析微信/支付宝的支付通知与账单详情页：\n· 通知监听只处理支付相关通知，不读取其他内容；\n· 读屏/截屏只在你打开账单详情页且存在待补全账单时短暂触发，识别结果（商户/金额）即用即删，截图不落盘；\n· 所有账目与识别数据仅保存在本机，不上传任何服务器。</string>
+    <string name="settings_about">关于</string>
+    <string name="settings_about_desc">自动记账 V1.0 · 通知监听 → 确认入账 → 自动分类</string>
+
+    <!-- 编辑/记一笔页 -->
+    <string name="title_edit_entry">编辑账单</string>
+    <string name="title_confirm_entry">确认入账</string>
+    <string name="title_add_entry">记一笔</string>
+    <string name="type_expense">支出</string>
+    <string name="type_refund">退款</string>
+    <string name="field_amount">金额（元）</string>
+    <string name="field_merchant">商户 / 备注</string>
+    <string name="field_category">分类</string>
+    <string name="field_merchant_optional">商户 / 备注（可选）</string>
+
+    <!-- 待处理页 -->
+    <string name="pending_screen_title">待处理通知</string>
+    <string name="pending_empty">没有待处理的通知</string>
+    <string name="pending_empty_desc">收到微信/支付宝支付通知后会出现在这里\n解析成功的还会弹确认通知，点「入账」即可</string>
+    <string name="pending_confirm">入账</string>
+    <string name="pending_edit">改</string>
+    <string name="pending_manual">补录</string>
+    <string name="pending_discard">删</string>
+
+    <!-- 分类管理页 -->
+    <string name="category_manage_title">分类管理</string>
+    <string name="category_add">新增分类</string>
+    <string name="category_add_hint">图标将按分类名自动匹配</string>
+    <string name="category_name">名称</string>
+    <string name="category_delete">删除分类</string>
+    <string name="category_uncategorized">未分类</string>
+
+    <!-- 规则页 -->
+    <string name="rules_title">分类规则</string>
+    <string name="rules_manage_categories">管理分类</string>
+    <string name="rules_add">新增规则</string>
+    <string name="rules_add_hint">商户名包含关键词时，自动归入对应分类。越靠前优先级越高。</string>
+    <string name="rules_empty">还没有规则，点 + 新增\n例如：美团 → 餐饮</string>
+    <string name="rules_delete">删除规则</string>
+    <string name="rules_pattern">商户关键词</string>
+    <string name="rules_target">目标分类</string>
+    <string name="rules_select_category">选择分类</string>
+
+    <!-- 统计页 -->
+    <string name="stats_title">统计</string>
+    <string name="stats_month_expense">本月支出</string>
+    <string name="stats_month_empty">本月暂无支出</string>
+    <string name="stats_daily_trend">每日趋势 · 近 30 天</string>
+    <string name="stats_category_share">本月分类占比</string>
+
+    <!-- 首页 -->
+    <string name="home_empty">还没有账单\n收到支付通知后点「入账」即可记录</string>
+    <string name="home_delete_title">删除账单</string>
+    <string name="home_delete_message">确定要删除这条账单吗？删除后可在提示条中撤销。</string>
+    <string name="home_today">今日</string>
+    <string name="home_month">本月</string>
+    <string name="home_daily_avg">日均</string>
+    <string name="home_view_stats">查看统计 ›</string>
+    <string name="home_view_stats_cd">查看统计</string>
+    <string name="home_delete_snackbar">已删除「%1$s」</string>
+    <string name="home_today_avg">今日 ¥%1$s   ·   日均 ¥%2$s</string>
+
+    <!-- 方案 F 极简首页 -->
+    <string name="greeting_morning">早上好</string>
+    <string name="greeting_noon">中午好</string>
+    <string name="greeting_afternoon">下午好</string>
+    <string name="greeting_evening">晚上好</string>
+    <string name="mono_all">全部</string>
+    <string name="mono_detail">账单明细</string>
+    <string name="mono_add_entry">＋ 记一笔</string>
+    <string name="mono_empty">没有符合条件的账单</string>
+    <string name="mono_stats">统计 ›</string>
+    <string name="mono_count">%1$d 笔</string>
+
+    <!-- 通知 -->
+    <string name="notification_channel_name">待确认入账</string>
+    <string name="notification_channel_desc">收到支付通知后请你确认入账</string>
+    <string name="notification_refund_title">收到退款</string>
+    <string name="notification_expense_title">支出</string>
+    <string name="notification_confirm_body">· 点「入账」直接记下这笔</string>
+    <string name="notification_action_confirm">入账</string>
+    <string name="notification_action_edit">修改后入账</string>
+    <string name="notification_action_dismiss">忽略</string>
+    <string name="reader_offline_title">自动记账：读屏服务已掉线</string>
+    <string name="reader_offline_body">点按重新开启，否则无法自动读取商户名</string>
+    <string name="reader_offline_big">系统清理了后台服务。点按这条通知，在列表里重新勾选「账单读屏补全」即可恢复。</string>
 </resources>

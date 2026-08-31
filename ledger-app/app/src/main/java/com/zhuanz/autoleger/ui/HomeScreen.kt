@@ -57,6 +57,11 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.zhuanz.autoleger.data.AppContainer
 import com.zhuanz.autoleger.data.TransactionEntity
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.platform.LocalContext
+import com.zhuanz.autoleger.R
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -88,6 +93,7 @@ fun HomeScreen(
 ) {
     val uiState by vm.uiState.collectAsState()
     val container = rememberContainer()
+    val context = LocalContext.current
     val homeVm = homeViewModel(container)
     val transactions by container.transactionDao.observeAll().collectAsState(initial = emptyList())
     val categories by container.categoryDao.observeAll().collectAsState(initial = emptyList())
@@ -101,8 +107,8 @@ fun HomeScreen(
     LaunchedEffect(Unit) {
         homeVm.undoEvents.collect { deletedTx ->
             val result = snackbarHostState.showSnackbar(
-                message = "已删除「${deletedTx.merchant}」",
-                actionLabel = "撤销",
+                message = context.getString(R.string.home_delete_snackbar, deletedTx.merchant),
+                actionLabel = context.getString(R.string.common_undo),
                 withDismissAction = true,
             )
             if (result == SnackbarResult.ActionPerformed) {
@@ -193,7 +199,7 @@ fun HomeScreen(
             ) {
                 Icon(Icons.Filled.Add, contentDescription = null)
                 Spacer(Modifier.width(6.dp))
-                Text("记一笔", fontWeight = FontWeight.Medium)
+                Text(stringResource(R.string.title_add_entry), fontWeight = FontWeight.Medium)
             }
         },
     ) { padding ->
@@ -212,7 +218,7 @@ fun HomeScreen(
             if (groups.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text(
-                        "还没有账单\n收到支付通知后点「入账」即可记录",
+                        stringResource(R.string.home_empty),
                         textAlign = TextAlign.Center,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodyMedium,
@@ -227,7 +233,7 @@ fun HomeScreen(
                         items(group.items, key = { it.id }) { tx ->
                             TransactionRow(
                                 tx = tx,
-                                categoryName = categories.firstOrNull { it.id == tx.categoryId }?.name ?: "未分类",
+                                categoryName = categories.firstOrNull { it.id == tx.categoryId }?.name ?: stringResource(R.string.category_uncategorized),
                                 dateText = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(tx.time)),
                                 onClick = { onEdit(tx.id) },
                                 onDelete = {
@@ -269,13 +275,13 @@ private fun DeleteConfirmDialog(
     if (!visible) return
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("删除账单") },
-        text = { Text("确定要删除这条账单吗？删除后可在提示条中撤销。") },
+        title = { Text(stringResource(R.string.home_delete_title)) },
+        text = { Text(stringResource(R.string.home_delete_message)) },
         confirmButton = {
-            TextButton(onClick = onConfirm) { Text("删除") }
+            TextButton(onClick = onConfirm) { Text(stringResource(R.string.common_delete)) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) }
         },
     )
 }
@@ -309,6 +315,7 @@ private fun TransactionRow(
     onClick: () -> Unit,
     onDelete: () -> Unit,
 ) {
+    val deleteLabel = stringResource(R.string.common_delete)
     val appear = remember { Animatable(0f) }
     androidx.compose.runtime.LaunchedEffect(Unit) {
         appear.animateTo(1f, tween(350, easing = FastOutSlowInEasing))
@@ -330,7 +337,7 @@ private fun TransactionRow(
         Column(Modifier.weight(1f)) {
             Text(tx.merchant, style = MaterialTheme.typography.bodyLarge)
             Text(
-                categoryName + " · " + dateText + if (tx.source == "CSV") " · 导入" else "",
+                categoryName + " · " + dateText + if (tx.source == "CSV") stringResource(R.string.common_imported) else "",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -345,7 +352,8 @@ private fun TransactionRow(
             "✕",
             modifier = Modifier
                 .size(24.dp)
-                .clickable(onClick = onDelete),
+                .clickable(onClick = onDelete)
+                .semantics { contentDescription = deleteLabel },
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 14.sp,
             textAlign = TextAlign.Center,
@@ -377,14 +385,14 @@ fun GradientHeroHeader(monthCents: Long, todayCents: Long, avgCents: Long, onSta
         Column {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    "本月支出",
+                    stringResource(R.string.stats_month_expense),
                     style = MaterialTheme.typography.labelMedium,
                     color = Color.White.copy(alpha = 0.85f),
                     letterSpacing = 2.sp,
                 )
                 Spacer(Modifier.width(6.dp))
                 Icon(
-                    Icons.Rounded.Insights, contentDescription = "查看统计",
+                    Icons.Rounded.Insights, contentDescription = stringResource(R.string.home_view_stats_cd),
                     tint = Color.White.copy(alpha = 0.85f), modifier = Modifier.size(16.dp),
                 )
             }
@@ -395,13 +403,17 @@ fun GradientHeroHeader(monthCents: Long, todayCents: Long, avgCents: Long, onSta
             )
             Spacer(Modifier.height(6.dp))
             Text(
-                "今日 ¥${"%,.2f".format(todayCents / 100.0)}   ·   日均 ¥${"%,.2f".format(avgCents / 100.0)}",
+                stringResource(
+                    R.string.home_today_avg,
+                    "%,.2f".format(todayCents / 100.0),
+                    "%,.2f".format(avgCents / 100.0),
+                ),
                 style = MaterialTheme.typography.bodySmall,
                 color = Color.White.copy(alpha = 0.8f),
             )
             Spacer(Modifier.height(12.dp))
             Text(
-                "查看统计 ›",
+                stringResource(R.string.home_view_stats),
                 style = MaterialTheme.typography.labelLarge,
                 color = Color.White,
                 fontWeight = FontWeight.SemiBold,
@@ -415,7 +427,7 @@ fun GradientHeroHeader(monthCents: Long, todayCents: Long, avgCents: Long, onSta
 fun LargeTitleHeader(monthCents: Long, todayCents: Long, avgCents: Long) {
     Column(Modifier.padding(horizontal = 24.dp, vertical = 16.dp)) {
         Text(
-            "自动记账",
+            stringResource(R.string.app_name),
             fontSize = 32.sp,
             fontWeight = FontWeight.ExtraBold,
             color = MaterialTheme.colorScheme.onBackground,
@@ -425,18 +437,18 @@ fun LargeTitleHeader(monthCents: Long, todayCents: Long, avgCents: Long) {
         Spacer(Modifier.height(12.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Column {
-                Text("本月支出", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.stats_month_expense), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 AnimatedAmountText(
                     cents = monthCents,
                     style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                 )
             }
             Column(horizontalAlignment = Alignment.End) {
-                Text("今日", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.home_today), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 AmountText(cents = todayCents, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium))
             }
             Column(horizontalAlignment = Alignment.End) {
-                Text("日均", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.home_daily_avg), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 AmountText(cents = avgCents, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium))
             }
         }
@@ -454,7 +466,7 @@ fun CompactHeader(monthCents: Long, todayCents: Long, avgCents: Long) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                "自动记账",
+                stringResource(R.string.app_name),
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onBackground,
@@ -464,9 +476,9 @@ fun CompactHeader(monthCents: Long, todayCents: Long, avgCents: Long) {
             Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            InfoChip("今日", todayCents, Modifier.weight(1f))
-            InfoChip("本月", monthCents, Modifier.weight(1f))
-            InfoChip("日均", avgCents, Modifier.weight(1f))
+            InfoChip(stringResource(R.string.home_today), todayCents, Modifier.weight(1f))
+            InfoChip(stringResource(R.string.home_month), monthCents, Modifier.weight(1f))
+            InfoChip(stringResource(R.string.home_daily_avg), avgCents, Modifier.weight(1f))
         }
     }
 }

@@ -30,6 +30,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import com.zhuanz.autoleger.R
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -56,6 +58,7 @@ fun StatsScreen() {
     val container = rememberContainer()
     val transactions by container.transactionDao.observeAll().collectAsState(initial = emptyList())
     val categories by container.categoryDao.observeAll().collectAsState(initial = emptyList())
+    val uncategorizedLabel = stringResource(R.string.category_uncategorized)
 
     val cal = Calendar.getInstance()
     val monthStart = cal.apply {
@@ -83,7 +86,7 @@ fun StatsScreen() {
         monthTx.groupBy { it.categoryId }
             .map { (catId, items) ->
                 val cat = categories.firstOrNull { it.id == catId }
-                CategorySum(cat?.name ?: "未分类", items.sumOf { it.amountCents })
+                CategorySum(cat?.name ?: uncategorizedLabel, items.sumOf { it.amountCents })
             }
             .sortedByDescending { it.amountCents }
     }
@@ -92,7 +95,7 @@ fun StatsScreen() {
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
-                title = { Text("统计", fontWeight = FontWeight.Bold) },
+                title = { Text(stringResource(R.string.stats_title), fontWeight = FontWeight.Bold) },
                 colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background,
                 ),
@@ -102,7 +105,7 @@ fun StatsScreen() {
         LazyColumn(Modifier.padding(padding).fillMaxSize()) {
             item {
                 Text(
-                    "本月支出",
+                    stringResource(R.string.stats_month_expense),
                     Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -117,7 +120,7 @@ fun StatsScreen() {
 
             // —— 每日趋势（30 天柱状图，Canvas 自绘 + 生长动画）——
             item {
-                ChartCard(title = "每日趋势 · 近 30 天") {
+                ChartCard(title = stringResource(R.string.stats_daily_trend)) {
                     TrendBarChart(
                         daily = daily,
                         color = MaterialTheme.colorScheme.primary,
@@ -128,10 +131,10 @@ fun StatsScreen() {
 
             // —— 分类占比环形图 ——
             item {
-                ChartCard(title = "本月分类占比") {
+                ChartCard(title = stringResource(R.string.stats_category_share)) {
                     if (categorySums.isEmpty()) {
                         Text(
-                            "本月暂无支出",
+                            stringResource(R.string.stats_month_empty),
                             Modifier.fillMaxWidth().padding(vertical = 24.dp),
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -240,6 +243,7 @@ fun CategoryDonut(data: List<CategorySum>, modifier: Modifier = Modifier) {
     val progress = remember { Animatable(0f) }
     val labelColorArgb = MaterialTheme.colorScheme.onSurfaceVariant.toArgb()
     val amountColorArgb = MaterialTheme.colorScheme.onSurface.toArgb()
+    val monthLabel = stringResource(R.string.stats_month_expense)
     LaunchedEffect(data) {
         progress.snapTo(0f)
         progress.animateTo(1f, tween(900, easing = FastOutSlowInEasing))
@@ -270,7 +274,7 @@ fun CategoryDonut(data: List<CategorySum>, modifier: Modifier = Modifier) {
                 isAntiAlias = true
                 textAlign = android.graphics.Paint.Align.CENTER
             }
-            drawText("本月支出", size.width / 2, size.height / 2 - 6.dp.toPx(), paint)
+            drawText(monthLabel, size.width / 2, size.height / 2 - 6.dp.toPx(), paint)
             paint.color = amountColorArgb
             paint.textSize = 20.sp.toPx()
             paint.isFakeBoldText = true
