@@ -122,6 +122,15 @@ class BillReaderService : AccessibilityService() {
                 retries = 0
                 return@launch
             }
+            // 当前前台 App 是否还是目标 App？如果用户已离开支付页（回到桌面/打开其他 App），
+            // 此时截屏只会拍到别的界面（如 App 自己的首页），白白浪费一次截屏+OCR。
+            // 用 rootInActiveWindow 判断：null（无窗口/桌面）或 packageName 不匹配都跳过。
+            val currentFg = rootInActiveWindow?.packageName?.toString()
+            if (currentFg == null || currentFg != pkg) {
+                if (BuildConfig.DEBUG) Log.d(TAG, "skip ocr: foreground=$currentFg target=$pkg")
+                retries = 0
+                return@launch
+            }
             bill = screenshotOcr(expected)
             if (bill != null) {
                 retries = 0

@@ -27,6 +27,21 @@ class PaymentNotificationListener : NotificationListenerService() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    override fun onListenerConnected() {
+        super.onListenerConnected()
+        // App 重启后通知监听服务重新绑定，此时系统不会重放已存在的通知。
+        // 主动检查微信/支付宝当前活跃的通知，防止重启期间错过的支付通知丢失。
+        try {
+            for (sbn in activeNotifications) {
+                val pkg = sbn.packageName ?: continue
+                if (pkg != "com.tencent.mm" && pkg != "com.eg.android.AlipayGphone") continue
+                onNotificationPosted(sbn)
+            }
+        } catch (_: Exception) {
+            // 安全兜底：getActiveNotifications 在某些系统上可能抛异常
+        }
+    }
+
     override fun onDestroy() {
         scope.cancel()
         super.onDestroy()
