@@ -136,23 +136,22 @@ fun SettingsScreen(
         }
     }
 
-    // —— 导入账单（CSV / xlsx 自动识别） ——
+    // —— 导入账单（CSV / xlsx 按内容魔数自动识别） ——
     val csvLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri ->
         if (uri != null) {
             scope.launch {
                 try {
-                    val fileName = uri.lastPathSegment?.lowercase() ?: ""
-                    val isXlsx = fileName.endsWith(".xlsx")
                     val result = withContext(Dispatchers.IO) {
-                        context.contentResolver.openInputStream(uri)?.use { stream ->
-                            if (isXlsx) {
-                                XlsxImporter.parse(appContainer, stream)
-                            } else {
-                                CsvImporter.parse(appContainer, stream)
-                            }
-                        } ?: throw Exception("无法读取文件")
+                        val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                            ?: throw Exception("无法读取文件")
+                        // 按 ZIP 魔数 PK\x03\x04 识别 xlsx，不依赖文件名（部分文件选择器拿不到扩展名）
+                        val isXlsx = bytes.size >= 4 &&
+                            bytes[0] == 0x50.toByte() && bytes[1] == 0x4B.toByte() &&
+                            bytes[2] == 0x03.toByte() && bytes[3] == 0x04.toByte()
+                        if (isXlsx) XlsxImporter.parse(appContainer, bytes.inputStream())
+                        else CsvImporter.parse(appContainer, bytes.inputStream())
                     }
                     if (result.errors.isNotEmpty()) {
                         Toast.makeText(
