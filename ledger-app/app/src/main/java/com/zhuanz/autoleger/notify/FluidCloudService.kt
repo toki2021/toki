@@ -7,6 +7,8 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
+import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.zhuanz.autoleger.LedgerAppProvider
@@ -24,19 +26,13 @@ import kotlinx.coroutines.launch
 
 /**
  * 流动云胶囊前台服务。
- *
- * 当有待处理条目时启动，在 ColorOS 流动云区域显示胶囊：
- *   "¥14.14 待确认" +  ⟳ 图标
- * 点胶囊展开后可见"重新识别"按钮。
- *
- * 无需接入 Realme 闭源 SDK——ColorOS 14+ 会自动将前台服务的持续通知
- * 渲染为摄像头位置的胶囊形态。
  */
 class FluidCloudService : Service() {
 
     companion object {
         private const val TAG = "FluidCloud"
         private const val NOTIFICATION_ID = 10001
+        private const val PERSISTENT_NOTIFICATION_ID = 10002
         const val CHANNEL_ID = "fluid_cloud"
         const val ACTION_RECOGNIZE = "com.zhuanz.autoleger.action.FLUID_RECOGNIZE"
         const val EXTRA_PENDING_ID = "pending_id"
@@ -61,6 +57,21 @@ class FluidCloudService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // 必须立即 startForeground，否则 Android 14+ 会崩溃
+        val placeholder = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_receipt)
+            .setContentTitle("加载中...")
+            .setContentText("正在获取待处理条目")
+            .setOngoing(true)
+            .setCategory(Notification.CATEGORY_STATUS)
+            .setShowWhen(false)
+            .build()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            startForeground(NOTIFICATION_ID, placeholder, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+        } else {
+            startForeground(NOTIFICATION_ID, placeholder)
+        }
+
         // 每次启动/刷新时取消旧任务，重新开始
         job?.cancel()
         job = scope.launch {
@@ -71,8 +82,11 @@ class FluidCloudService : Service() {
                 stopSelf()
                 return@launch
             }
-            startForeground(NOTIFICATION_ID, buildNotification(latest))
-            // 每 30 秒检查一次，无待处理条目（金额不为 null 的）时自动停止
+            // 用真实数据替换占位通知
+            // 同时通过 NotificationManager 以不同 ID 发布，确保即使服务被系统停止后通知仍然可见
+            val manager = getSystemService(NotificationManager::class.java)
+            manager.notify(PERSISTENT_NOTIFICATION_ID, buildNotification(latest))
+            // 每 30 秒检查一次，无待处理条目时自动停止
             while (true) {
                 delay(30_000)
                 val current = container.pendingEntryDao.observeAll().first()
@@ -132,8 +146,9 @@ class FluidCloudService : Service() {
 
     private fun createChannel() {
         val manager = getSystemService(NotificationManager::class.java)
+        // 使用 IMPORTANCE_DEFAULT 使通知在状态栏可见
         val channel = NotificationChannel(
-            CHANNEL_ID, "流动云", NotificationManager.IMPORTANCE_LOW,
+            CHANNEL_ID, "流动云", NotificationManager.IMPORTANCE_DEFAULT,
         ).apply {
             description = "待处理入账的流动云胶囊提示"
             setShowBadge(false)
