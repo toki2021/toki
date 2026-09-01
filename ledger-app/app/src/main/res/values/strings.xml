@@ -47,6 +47,10 @@
     <string name="backup_import_csv_success">导入完成：%1$d 笔新账单，%2$d 笔已跳过</string>
     <string name="backup_import_error">导入失败：%1$s</string>
     <string name="backup_csv_guide">从支付宝/微信的「账单」页导出 CSV 或 Excel 文件后，在此导入。自动识别格式。</string>
+    <string name="backup_auto">自动备份</string>
+    <string name="backup_auto_desc">每 3 天自动备份账目到系统下载文件夹，删除 App 也不会丢失</string>
+    <string name="backup_auto_last">上次备份：%1$s</string>
+    <string name="backup_auto_last_none">尚未备份</string>
     <string name="settings_privacy">隐私说明</string>
     <string name="settings_privacy_desc">本 App 仅在你授权后，于本机解析微信/支付宝的支付通知与账单详情页：\n· 通知监听只处理支付相关通知，不读取其他内容；\n· 读屏/截屏只在你打开账单详情页且存在待补全账单时短暂触发，识别结果（商户/金额）即用即删，截图不落盘；\n· 所有账目与识别数据仅保存在本机，不上传任何服务器。</string>
     <string name="settings_about">关于</string>

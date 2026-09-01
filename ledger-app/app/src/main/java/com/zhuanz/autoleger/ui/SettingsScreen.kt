@@ -51,6 +51,7 @@ import com.zhuanz.autoleger.R
 import com.zhuanz.autoleger.data.BackupManager
 import com.zhuanz.autoleger.data.CsvImporter
 import com.zhuanz.autoleger.data.XlsxImporter
+import com.zhuanz.autoleger.backup.BackupWorker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -324,6 +325,42 @@ fun SettingsScreen(
             Spacer(Modifier.height(4.dp))
             Text(
                 stringResource(R.string.backup_csv_guide),
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(12.dp))
+
+            // —— 自动备份 ——
+            val backupPrefs = context.getSharedPreferences("auto_backup", android.content.Context.MODE_PRIVATE)
+            var autoBackupEnabled by remember { mutableStateOf(backupPrefs.getBoolean("enabled", false)) }
+            val lastBackupTime = backupPrefs.getLong("last_backup_time", 0L)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(stringResource(R.string.backup_auto), style = MaterialTheme.typography.titleMedium)
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        stringResource(R.string.backup_auto_desc),
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                androidx.compose.material3.Switch(
+                    checked = autoBackupEnabled,
+                    onCheckedChange = {
+                        autoBackupEnabled = it
+                        BackupWorker.setEnabled(context, it)
+                    },
+                )
+            }
+            Spacer(Modifier.height(4.dp))
+            Text(
+                if (lastBackupTime > 0) {
+                    val date = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault())
+                        .format(Date(lastBackupTime))
+                    stringResource(R.string.backup_auto_last, date)
+                } else {
+                    stringResource(R.string.backup_auto_last_none)
+                },
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

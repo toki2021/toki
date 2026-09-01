@@ -51,5 +51,6 @@ dependencies {
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
     implementation(libs.mlkit.text.chinese)
+    implementation(libs.androidx.work.ktx)
     testImplementation(libs.junit4)
 }
