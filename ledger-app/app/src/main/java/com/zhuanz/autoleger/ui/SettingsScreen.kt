@@ -50,6 +50,7 @@ import com.zhuanz.autoleger.LedgerAppProvider
 import com.zhuanz.autoleger.R
 import com.zhuanz.autoleger.data.BackupManager
 import com.zhuanz.autoleger.data.CsvImporter
+import com.zhuanz.autoleger.data.XlsxImporter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -134,16 +135,22 @@ fun SettingsScreen(
         }
     }
 
-    // —— 导入 CSV ——
+    // —— 导入账单（CSV / xlsx 自动识别） ——
     val csvLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri ->
         if (uri != null) {
             scope.launch {
                 try {
+                    val fileName = uri.lastPathSegment?.lowercase() ?: ""
+                    val isXlsx = fileName.endsWith(".xlsx")
                     val result = withContext(Dispatchers.IO) {
                         context.contentResolver.openInputStream(uri)?.use { stream ->
-                            CsvImporter.parse(appContainer, stream)
+                            if (isXlsx) {
+                                XlsxImporter.parse(appContainer, stream)
+                            } else {
+                                CsvImporter.parse(appContainer, stream)
+                            }
                         } ?: throw Exception("无法读取文件")
                     }
                     if (result.errors.isNotEmpty()) {
@@ -311,7 +318,7 @@ fun SettingsScreen(
             }
             Spacer(Modifier.height(12.dp))
             OutlinedButton(
-                onClick = { csvLauncher.launch(arrayOf("text/csv", "text/comma-separated-values", "*/*")) },
+                onClick = { csvLauncher.launch(arrayOf("text/csv", "text/comma-separated-values", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "*/*")) },
                 modifier = Modifier.fillMaxWidth(),
             ) { Text(stringResource(R.string.backup_import_csv)) }
             Spacer(Modifier.height(4.dp))
