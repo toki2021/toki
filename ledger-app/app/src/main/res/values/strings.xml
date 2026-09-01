@@ -38,7 +38,15 @@
     <string name="settings_reader_disabled">❌ 未开启。开启后，打开账单详情页会自动读取收款方商户（通知里通常只有金额）。仅读取账单页，不收集其他内容。</string>
     <string name="settings_grant_accessibility">去系统设置开启</string>
     <string name="settings_data_backup">数据与备份</string>
-    <string name="settings_data_backup_desc">账目数据仅保存在本机。WebDAV 云备份将在 V1.3 提供。</string>
+    <string name="settings_data_backup_desc">导出 JSON 备份文件，或从备份恢复。也可从支付宝/微信导出的 CSV 账单导入。</string>
+    <string name="backup_export">导出备份</string>
+    <string name="backup_import">恢复备份</string>
+    <string name="backup_import_csv">导入支付宝/微信账单</string>
+    <string name="backup_export_success">备份已导出：%1$s</string>
+    <string name="backup_import_success">%1$s</string>
+    <string name="backup_import_csv_success">导入完成：%1$d 笔新账单，%2$d 笔已跳过</string>
+    <string name="backup_import_error">导入失败：%1$s</string>
+    <string name="backup_csv_guide">从支付宝/微信的「账单」页导出 CSV 文件后，在此导入。</string>
     <string name="settings_privacy">隐私说明</string>
     <string name="settings_privacy_desc">本 App 仅在你授权后，于本机解析微信/支付宝的支付通知与账单详情页：\n· 通知监听只处理支付相关通知，不读取其他内容；\n· 读屏/截屏只在你打开账单详情页且存在待补全账单时短暂触发，识别结果（商户/金额）即用即删，截图不落盘；\n· 所有账目与识别数据仅保存在本机，不上传任何服务器。</string>
     <string name="settings_about">关于</string>
