@@ -15,6 +15,7 @@ import com.zhuanz.autoleger.R
 import com.zhuanz.autoleger.data.PendingEntryEntity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
@@ -50,6 +51,7 @@ class FluidCloudService : Service() {
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var job: Job? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -59,7 +61,9 @@ class FluidCloudService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        scope.launch {
+        // 每次启动/刷新时取消旧任务，重新开始
+        job?.cancel()
+        job = scope.launch {
             val container = (applicationContext as LedgerAppProvider).container
             val pending = container.pendingEntryDao.observeAll().first()
             val latest = pending.maxByOrNull { it.time }
@@ -83,6 +87,7 @@ class FluidCloudService : Service() {
     }
 
     override fun onDestroy() {
+        job?.cancel()
         scope.cancel()
         super.onDestroy()
     }

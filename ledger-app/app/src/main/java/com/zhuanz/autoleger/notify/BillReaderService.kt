@@ -339,6 +339,8 @@ class BillReaderService : AccessibilityService() {
             PaymentParser.Parsed(bill.amountCents, bill.merchant, isRefund = false),
             now,
         )
+        // 启动流动云胶囊（ColorOS 摄像头位置显示"¥14.14 待确认"）
+        FluidCloudService.start(applicationContext)
     }
 
     /** 目标条目是否匹配本次 OCR：金额未解析的可由 OCR 补全，已解析的须金额一致、来源一致 */
@@ -380,6 +382,8 @@ class BillReaderService : AccessibilityService() {
             PaymentParser.Parsed(amount, merchant, isRefund = pending.text.contains("退款")),
             now,
         )
+        // 流动云胶囊刷新显示最新商户/金额
+        FluidCloudService.start(applicationContext)
     }
 
     private fun clearTarget(id: Long?) {
