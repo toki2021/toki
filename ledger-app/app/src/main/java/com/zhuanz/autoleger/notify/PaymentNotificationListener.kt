@@ -27,8 +27,19 @@ class PaymentNotificationListener : NotificationListenerService() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    companion object {
+        @Volatile
+        var instance: PaymentNotificationListener? = null
+    }
+
+    override fun onCreate() {
+        super.onCreate()
+        instance = this
+    }
+
     override fun onListenerConnected() {
         super.onListenerConnected()
+        instance = this
         // App 重启后通知监听服务重新绑定，此时系统不会重放已存在的通知。
         // 主动检查微信/支付宝当前活跃的通知，防止重启期间错过的支付通知丢失。
         try {
@@ -44,7 +55,23 @@ class PaymentNotificationListener : NotificationListenerService() {
 
     override fun onDestroy() {
         scope.cancel()
+        instance = null
         super.onDestroy()
+    }
+
+    /**
+     * 收起通知栏（供手动"重新识别"触发前先把遮罩收掉，避免截屏拍到通知栏内容）。
+     * collapsePanels() 是未进入编译期 stub 的隐藏方法，用反射调用；
+     * 若被隐藏 API 限制拦截，则由系统广播 ACTION_CLOSE_SYSTEM_DIALOGS 兜底。
+     */
+    fun collapseShade() {
+        try {
+            val method = Class.forName("android.service.notification.NotificationListenerService")
+                .getMethod("collapsePanels")
+            method.invoke(this)
+        } catch (_: Exception) {
+            // 隐藏 API 拦截或反射异常：静默忽略，交由系统广播兜底
+        }
     }
 
     // 去重检查与入库必须串行：两条相同通知并发回调时，不加锁会双双通过去重检查

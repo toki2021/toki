@@ -6,6 +6,7 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
+import android.widget.Toast
 import android.view.accessibility.AccessibilityNodeInfo
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.Text
@@ -41,6 +42,8 @@ class BillReaderService : AccessibilityService() {
 
     companion object {
         private const val TAG = "BillReader"
+        private const val COMP_WECHAT = "com.tencent.mm"
+        private const val COMP_ALIPAY = "com.eg.android.AlipayGphone"
         @Volatile var instance: BillReaderService? = null
             private set
 
@@ -48,14 +51,52 @@ class BillReaderService : AccessibilityService() {
         @Volatile var targetPendingId: Long? = null
             private set
 
+        /** 收到"重新识别"请求（悬浮球/通知栏）：无条件对当前窗口 OCR 一次 */
+        @Volatile var reScanRequested = false
+            private set
+
         /** 通知监听在创建待确认条目后调用，触发一次截屏识别，并精确绑定目标条目 */
         fun requestCapture(pendingId: Long? = null) {
             targetPendingId = pendingId
             instance?.scheduleRead(1500)
         }
+
+        /**
+         * 常驻"重新识别当前屏幕"入口：通知栏按钮调用。
+         * 不受下拉通知栏造成的瞬时焦点偏移影响——直接对当前屏幕 OCR 一次，
+         * 识别成功则记账，识别不到则提示用户。OCR 结果走通用的"匹配/建档"路径。
+         * @return 0=已触发识别；-1=识别服务未运行
+         */
+        fun requestReScan(): Int {
+            val svc = instance ?: return -1
+            // 以当前/最近的前台支付 App 作为 OCR 目标；即便此刻焦点在通知栏，
+            // 也保留 lastPkg（最近一次支付页），OCR 直接拍当前屏。
+            val fg = svc.rootInActiveWindow?.packageName?.toString()
+            if (fg == COMP_WECHAT || fg == COMP_ALIPAY) svc.lastPkg = fg
+            reScanRequested = true
+            targetPendingId = null
+            svc.scheduleRead(200)
+            return 0
+        }
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /** 后台线程外的 UI 线程提示（进程内通用，不依赖 Activity） */
+    private fun toast(msg: String) {
+        Handler(Looper.getMainLooper()).post {
+            try {
+                Toast.makeText(applicationContext, msg, Toast.LENGTH_LONG).show()
+            } catch (_: Exception) {
+                // 读取服务被系统回收时可能拿不到 Context，忽略即可
+            }
+        }
+    }
+
+    private fun formatCents(cents: Long): String {
+        val yuan = cents / 100.0
+        return if (yuan == yuan.toLong().toDouble()) "%.0f".format(yuan) else "%.2f".format(yuan)
+    }
 
     // 这些词出现在"商户名"里说明它其实是通知句式/按钮词（如"你有一笔 的支出"、"完成"），
     // 同样视为可补全对象
@@ -99,7 +140,12 @@ class BillReaderService : AccessibilityService() {
 
     // 防抖 + 重试：结果页可能先显示"正在加载"数秒，失败后继续重试约 12 秒
     private val readRunnable: Runnable = Runnable {
-        val pkg = lastPkg ?: return@Runnable
+        // 手动"重新识别"对准当前前台窗口，不受"仅限支付宝/微信"限制；
+        // 自动路径仍用最近一次支付 App。
+        val manual = reScanRequested
+        reScanRequested = false
+        val pkg = (if (manual) rootInActiveWindow?.packageName?.toString() ?: lastPkg else lastPkg)
+            ?: return@Runnable
         scope.launch {
             // 通知侧解析出的实付金额是权威值：读屏/OCR 只确认页面并补商户，绝不改写金额
             // （"付14.60优惠0.46"的页面曾把小字号优惠金额当成实付，金额必须以通知为准）
@@ -112,31 +158,49 @@ class BillReaderService : AccessibilityService() {
             if (bill != null) {
                 retries = 0
                 if (BuildConfig.DEBUG) Log.d(TAG, "bill(tree) amount=${bill.amountCents} merchant=${bill.merchant} expected=$expected")
-                handleBill(bill, fromOcr = false, targetPendingId)
+                handleBill(bill, fromOcr = false, targetPendingId = targetPendingId, manual = manual)
                 return@launch
             }
-            // 引擎二：截屏 OCR。仅当窗口树几乎为空时（H5 页面的特征，
-            // 如微信/支付宝结算页）才截屏；聊天列表等文字丰富的页面自动跳过，
-            // 隐私上绝不截取聊天内容，电量上也只产生偶尔一次截屏。
-            if (texts.size > 8) {
+            // 引擎二：截屏 OCR。默认只在窗口树几乎为空时（H5 结算页特征）才截屏，
+            // 聊天列表等文字丰富的页面自动跳过，隐私上绝不截取聊天内容。
+            // 但两种情形会放宽：
+            //  - 手动"重新识别"（悬浮球/通知栏触发，用户主动要识别当前页）；
+            //  - 自动模式下页面已含"支付成功/已支付 + ¥金额"等强结果特征
+            //    （支付宝 NFC 碰一碰等，树字段多但姓名/金额解析不出，靠 OCR 兜底建档）。
+            if (texts.size > 8 && !manual && !isStrongResultPage(texts)) {
                 retries = 0
                 return@launch
             }
             // 当前前台 App 是否还是目标 App？如果用户已离开支付页（回到桌面/打开其他 App），
             // 此时截屏只会拍到别的界面（如 App 自己的首页），白白浪费一次截屏+OCR。
             // 用 rootInActiveWindow 判断：null（无窗口/桌面）或 packageName 不匹配都跳过。
-            val currentFg = rootInActiveWindow?.packageName?.toString()
-            if (currentFg == null || currentFg != pkg) {
-                if (BuildConfig.DEBUG) Log.d(TAG, "skip ocr: foreground=$currentFg target=$pkg")
-                retries = 0
-                return@launch
+            // 手动"重新识别"除外——主动识别时下拉通知栏会让焦点瞬时切到系统窗口，
+            // rootInActiveWindow 拿不到支付宝/微信，故手动模式不做该校验，直接拍屏。
+            if (!manual) {
+                val currentFg = rootInActiveWindow?.packageName?.toString()
+                if (currentFg == null || currentFg != pkg) {
+                    if (BuildConfig.DEBUG) Log.d(TAG, "skip ocr: foreground=$currentFg target=$pkg")
+                    retries = 0
+                    return@launch
+                }
             }
             bill = screenshotOcr(expected)
             if (bill != null) {
                 retries = 0
                 if (BuildConfig.DEBUG) Log.d(TAG, "bill(ocr) amount=${bill.amountCents} merchant=${bill.merchant} strong=${bill.strongPage} expected=$expected")
                 // OCR 模式只补全已有记录，不凭空建账（避免把账单列表页等误识别成新账单）
-                handleBill(bill, fromOcr = true, targetPendingId)
+                handleBill(bill, fromOcr = true, targetPendingId = targetPendingId, manual = manual)
+                // 手动"重新识别"时，给用户明确的记账反馈
+                if (manual) {
+                    toast("已识别并记录：¥${formatCents(bill.amountCents)} ${bill.merchant}")
+                }
+                return@launch
+            }
+            // 手动"重新识别"只识别一次：无论成功与否都给出结果，不进入后台重试循环，
+            // 避免用户对着支付页却反复被"加载中"拖住。
+            if (manual) {
+                toast("未识别到支付信息，请确认正停留在支付宝/微信的账单页")
+                retries = 0
                 return@launch
             }
             if (retries < 8) {
@@ -146,6 +210,18 @@ class BillReaderService : AccessibilityService() {
                 retries = 0
             }
         }
+    }
+
+    /** 页面文本是否已是"强支付结果特征"：命中结果页标志词，且同屏存在 ¥ 金额 */
+    private val strongResultAmount = Regex("[¥￥]\\s*[0-9]")
+    private val strongResultMarkers = listOf(
+        "支付成功", "付款成功", "成功付款", "支付完成", "已支付", "已付款", "已完成支付",
+        "交易成功", "转账成功", "还款成功", "充值成功", "支付凭证", "付款凭证", "已入账",
+    )
+
+    private fun isStrongResultPage(lines: List<String>): Boolean {
+        val joined = lines.joinToString(" ")
+        return strongResultMarkers.any { joined.contains(it) } && strongResultAmount.containsMatchIn(joined)
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
@@ -261,6 +337,7 @@ class BillReaderService : AccessibilityService() {
         bill: BillPageParser.Bill,
         fromOcr: Boolean = false,
         targetPendingId: Long? = null,
+        manual: Boolean = false,
     ) {
         val container = (applicationContext as LedgerAppProvider).container
         val now = System.currentTimeMillis()
@@ -318,7 +395,8 @@ class BillReaderService : AccessibilityService() {
         // 3) 都没有 → 新建待确认条目并弹确认通知。
         //    OCR 模式必须命中强页面特征（支付成功/凭证页）才允许建账，
         //    账单列表页等只有弱特征的页面会被拦截，绝不凭空创建。
-        if (fromOcr && !bill.strongPage) {
+        //    手动"重新识别"除外：用户主动触发，识别到就进"待确认"由用户把关。
+        if (fromOcr && !bill.strongPage && !manual) {
             if (BuildConfig.DEBUG) Log.d(TAG, "handleBill[3-new] 拦截：非强页面特征不建账")
             return
         }

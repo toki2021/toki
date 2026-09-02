@@ -23,6 +23,10 @@ object BillPageParser {
 
     private val amountRe = Regex("[¥￥]\\s*([0-9][0-9,]*(?:\\.[0-9]{1,2})?)")
 
+    // 带负号的支出金额：支付宝"账单详情"等页面显示为 -16.60（无 ¥、带负号）。
+    // 仅匹配带小数，避免把日期里的 "-09" 误当金额。
+    private val negativeAmountRe = Regex("-\\s*([0-9]+\\.\\d{1,2})")
+
     // 页面身份特征：支付完成后的结果页 + 账单详情页都算（结果页在每次支付后自动弹出）
     private val pageMarkers = listOf(
         "微信支付凭证", "账单详情", "交易详情", "付款详情", "支付成功", "付款成功",
@@ -153,7 +157,21 @@ object BillPageParser {
         expected?.let { e -> if (mainAmounts(text).contains(e)) return e }
         labeledAmount.find(text)?.groupValues?.get(1)?.replace(",", "")
             ?.toCents()?.takeIf { it > 0 }?.let { return it }
+        // 带负号的唯一支出金额（支付宝账单详情等无 ¥ 页面）：出现次数唯一才采用
+        val negatives = negativeAmounts(text)
+        if (negatives.size == 1) return negatives[0]
         return mainAmounts(text).singleOrNull()
+    }
+
+    /** 带负号的支出金额集合（-16.60），剔除"券/红包/积分/优惠"语境 */
+    private fun negativeAmounts(text: String): List<Long> {
+        val out = mutableListOf<Long>()
+        for (m in negativeAmountRe.findAll(text)) {
+            val prefix = text.substring(maxOf(0, m.range.first - 6), m.range.first)
+            if (discountPrefix.any { it in prefix }) continue
+            m.groupValues[1].replace(",", "").toCents()?.takeIf { it > 0 }?.let { out.add(it) }
+        }
+        return out.distinct()
     }
 
     /** 拼接文本中所有"主金额"（剔除"已优惠/立减/红包"等语境的金额），按出现顺序去重 */
@@ -168,21 +186,32 @@ object BillPageParser {
             .distinct()
     }
 
-    /** OCR 行的金额挑选：期望金额锚定 → 剔除优惠语境行后须唯一 */
+    /** OCR 行的金额挑选：期望金额锚定 → 剔除优惠/券/红包/积分语境行后，负号唯一 → 普通金额唯一 */
     private fun pickOcrAmount(lines: List<String>, expected: Long?): Long? {
         val mains = mutableListOf<Long>()
+        val negatives = mutableListOf<Long>()
         for ((i, l) in lines.withIndex()) {
             // 行内含"已优惠/立减"等语境词 → 该行金额不是实付
             if (discountWords.any { it in l }) continue
             // 语境词单独成行（"已优惠" + "¥0.46" 被拆成两行）时，紧随其后的金额也是优惠金额
             val prev = lines.getOrNull(i - 1)
             if (prev != null && ocrAmountToCents(prev) == null && discountWords.any { it in prev }) continue
+            // 券/红包/积分行的金额不是实付（"13元新人优惠券"）
+            if (l.contains("券") || l.contains("红包") || l.contains("积分")) continue
             ocrAmountToCents(l)?.let { mains.add(it) }
+            parseOcrNegative(l)?.let { negatives.add(it) }
         }
         val distinct = mains.distinct()
         expected?.let { e -> if (e in distinct) return e }
+        val distNeg = negatives.distinct()
+        if (distNeg.size == 1) return distNeg[0]
         return distinct.singleOrNull()
     }
+
+    /** OCR 行里的负号支出金额（-16.60），金额须带小数避免误抓日期/单号 */
+    private fun parseOcrNegative(line: String): Long? =
+        negativeAmountRe.find(line)?.groupValues?.get(1)?.replace(",", "")
+            ?.toCents()?.takeIf { it > 0 }
 
     /**
      * OCR 把大字号金额拆成两行的常见情形拼回一行："¥" + "14.14" → "¥14.14"，
@@ -254,7 +283,27 @@ object BillPageParser {
                 if (v.length >= 2 && v.length <= 30) return sanitize(v)
             }
         }
-        return null
+        // 兜底：无"商户/收款方"标签的账单详情页（如支付宝账单详情），商户是裸文本。
+        // 取第一个干净的商户候选（排除金额/时间/状态/账单等噪音），宁缺勿错。
+        return texts.firstNotNullOfOrNull { t ->
+            val s = t.trim()
+            if (s.isEmpty()) null else cleanFallbackMerchant(s)
+        }
+    }
+
+    /** 兜底商户候选的干净性检查：排除金额、时间、噪声词、状态词、纯数字 */
+    private fun cleanFallbackMerchant(t: String): String? {
+        val s = t.trim().trimEnd('：', ':', ' ', '>')
+        if (s.length < 2 || s.length > 30) return null
+        if (s.contains('¥') || s.contains('￥') || s.contains('元')) return null
+        if (timeOrDate.containsMatchIn(s)) return null
+        if (noiseWords.any { it in s }) return null
+        if (noiseLabels.any { s.contains(it) }) return null
+        val hasCjk = s.any { it.code in 0x4E00..0x9FFF }
+        val hasLetter = s.any { it.isLetter() }
+        if (s.any { it.isDigit() } && !hasCjk) return null
+        if (!hasCjk && !hasLetter) return null
+        return sanitize(s)
     }
 
     private fun sanitize(raw: String): String? {

@@ -1,6 +1,11 @@
 <resources>
     <string name="app_name">自动记账</string>
     <string name="bill_reader_desc">打开微信/支付宝的账单详情页时，读取收款方商户名，自动补全对应的待确认账单。仅在检测到账单详情页时读取，不上传任何数据。</string>
+    <string name="settings_notice_title">常驻通知栏提醒</string>
+    <string name="settings_notice_desc">通知栏常驻"记账助手"，支付页没能自动识别（如 NFC 碰一碰）时，下拉点"重新识别当前"即可补录。仅在你开启时显示。</string>
+    <string name="persist_notice_title">记账助手已就绪</string>
+    <string name="persist_notice_desc">支付页没能识别时，点此重新识别当前页面</string>
+    <string name="persist_notice_rescan">重新识别当前</string>
 
     <!-- 通用 -->
     <string name="common_save">保存</string>
@@ -101,6 +106,8 @@
     <!-- 统计页 -->
     <string name="stats_title">统计</string>
     <string name="stats_month_expense">本月支出</string>
+    <string name="stats_year_expense">今年支出</string>
+    <string name="stats_total_expense">累计支出</string>
     <string name="stats_month_empty">本月暂无支出</string>
     <string name="stats_daily_trend">每日趋势 · 近 30 天</string>
     <string name="stats_category_share">本月分类占比</string>

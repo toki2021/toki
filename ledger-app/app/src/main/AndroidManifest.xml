@@ -57,5 +57,14 @@
         <receiver
             android:name=".notify.FluidCloudReceiver"
             android:exported="false" />
+
+        <receiver
+            android:name=".notify.PersistentRescanReceiver"
+            android:exported="false" />
+
+        <service
+            android:name=".notify.PersistentRecognizeService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
     </application>
 </manifest>

@@ -13,15 +13,15 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -77,8 +77,11 @@ fun AddEntrySheet(onDismiss: () -> Unit) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         containerColor = MaterialTheme.colorScheme.surface,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     ) {
-        Column(Modifier.padding(horizontal = 24.dp)) {
+        Column(
+            Modifier.padding(horizontal = 24.dp).verticalScroll(rememberScrollState()),
+        ) {
             Text("记一笔", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(16.dp))
 
@@ -102,45 +105,45 @@ fun AddEntrySheet(onDismiss: () -> Unit) {
             }
             Spacer(Modifier.height(14.dp))
 
-            // 分类九宫格
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(4),
-                modifier = Modifier.fillMaxWidth().height(200.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                userScrollEnabled = false,
-            ) {
-                items(categories, key = { it.id }) { cat ->
-                    val selected = selectedCategory?.id == cat.id
-                    Column(
-                        Modifier
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(
-                                if (selected) MaterialTheme.colorScheme.primaryContainer
-                                else MaterialTheme.colorScheme.surfaceVariant
-                            )
-                            .clickable {
-                                selectedCategory = if (selected) null else cat
-                                if (!selected) {
-                                    // 选中分类自动带上商户联想：留空则用分类名
-                                    if (merchant.isBlank()) merchant = cat.name
+            // 分类九宫格：随整页滚动，图标再多也能滑到位
+            categories.chunked(4).forEach { rowCats ->
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    rowCats.forEach { cat ->
+                        val selected = selectedCategory?.id == cat.id
+                        Column(
+                            Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(
+                                    if (selected) MaterialTheme.colorScheme.primaryContainer
+                                    else MaterialTheme.colorScheme.surfaceVariant
+                                )
+                                .clickable {
+                                    selectedCategory = if (selected) null else cat
+                                    if (!selected) {
+                                        // 选中分类自动带上商户联想：留空则用分类名
+                                        if (merchant.isBlank()) merchant = cat.name
+                                    }
                                 }
-                            }
-                            .padding(vertical = 12.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        CategoryIcon(cat.name, size = 34.dp)
-                        Spacer(Modifier.height(6.dp))
-                        Text(
-                            cat.name,
-                            fontSize = 12.sp,
-                            color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
-                            else MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                                .padding(vertical = 12.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            CategoryIcon(cat.name, size = 34.dp)
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                cat.name,
+                                fontSize = 12.sp,
+                                color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 }
+                Spacer(Modifier.height(10.dp))
             }
-            Spacer(Modifier.height(14.dp))
 
             // 商户输入
             androidx.compose.material3.OutlinedTextField(

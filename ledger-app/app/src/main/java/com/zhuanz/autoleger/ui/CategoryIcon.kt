@@ -8,12 +8,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Category
 import androidx.compose.material.icons.rounded.DirectionsTransit
 import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.LocalDrink
 import androidx.compose.material.icons.rounded.MedicalServices
 import androidx.compose.material.icons.rounded.PhoneIphone
 import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
 import androidx.compose.material.icons.rounded.Restaurant
 import androidx.compose.material.icons.rounded.ShoppingBag
 import androidx.compose.material.icons.rounded.SportsEsports
+import androidx.compose.material.icons.rounded.TrendingUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -35,6 +37,10 @@ object CategoryIconMapper {
     )
 
     private val specs = listOf(
+        // 饮料/奶茶需排在餐饮之前，避免"饮品可"被"饮"误归入餐饮
+        Spec(listOf("饮料", "奶茶", "茶", "咖啡", "奶", "水吧"),
+            Icons.Rounded.LocalDrink,
+            ColorPair(Color(0xFFFFF1E4), Color(0xFFB4643C), Color(0xFF3D2618), Color(0xFFE8B48A))),
         Spec(listOf("餐饮", "食", "饮", "餐", "外卖", "小吃", "咖啡", "零食"),
             Icons.Rounded.Restaurant,
             ColorPair(Color(0xFFFFF0DC), Color(0xFFC47B1D), Color(0xFF3D2E17), Color(0xFFF0BE71))),
@@ -53,6 +59,10 @@ object CategoryIconMapper {
         Spec(listOf("医", "药", "疗", "诊"),
             Icons.Rounded.MedicalServices,
             ColorPair(Color(0xFFFFE3E3), Color(0xFFC43B3B), Color(0xFF47201F), Color(0xFFF5A5A5))),
+        Spec(listOf("投资", "基金", "理财", "证券", "股票", "黄金", "保险",
+                "蚂蚁财富", "天天基金", "东方财富"),
+            Icons.Rounded.TrendingUp,
+            ColorPair(Color(0xFFE3F5EA), Color(0xFF1E9E4F), Color(0xFF16351F), Color(0xFF7AD99B))),
         Spec(listOf("通讯", "话费", "网络"),
             Icons.Rounded.PhoneIphone,
             ColorPair(Color(0xFFDFF3F2), Color(0xFF0E8078), Color(0xFF123A37), Color(0xFF7ADBD2))),

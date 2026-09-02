@@ -40,6 +40,9 @@ val DEFAULT_CATEGORIES = listOf(
     "娱乐" to "🎮",
     "医疗" to "💊",
     "通讯" to "📱",
+    "饮料" to "🧃",
+    "奶茶" to "🧋",
+    "投资" to "📈",
     "其他" to "❓",
 )
 
@@ -55,10 +58,11 @@ class AppContainer(context: Context) {
     /** 交易仓库：ViewModel 应通过它而非 DAO 直接读写 */
     val transactionRepository: TransactionRepository = TransactionRepository(transactionDao)
 
-    /** 首次启动写入默认分类 */
+    /** 首次启动写入默认分类；已升级用户也会补种缺失的默认分类（如新增的"饮料/奶茶"） */
     suspend fun seedDefaultCategoriesIfNeeded() {
-        if (categoryDao.count() == 0) {
-            DEFAULT_CATEGORIES.forEach { (name, emoji) ->
+        val existing = categoryDao.observeAll().first().map { it.name }.toSet()
+        DEFAULT_CATEGORIES.forEach { (name, emoji) ->
+            if (name !in existing) {
                 categoryDao.insert(CategoryEntity(name = name, emoji = emoji))
             }
         }

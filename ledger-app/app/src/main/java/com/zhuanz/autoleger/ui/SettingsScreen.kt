@@ -34,6 +34,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -52,6 +53,7 @@ import com.zhuanz.autoleger.data.BackupManager
 import com.zhuanz.autoleger.data.CsvImporter
 import com.zhuanz.autoleger.data.XlsxImporter
 import com.zhuanz.autoleger.backup.BackupWorker
+import com.zhuanz.autoleger.notify.PersistentRecognizeService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -290,6 +292,30 @@ fun SettingsScreen(
                     modifier = Modifier.padding(top = 8.dp),
                 ) { Text(stringResource(R.string.settings_grant_accessibility)) }
             }
+            HorizontalDivider(Modifier.padding(vertical = 16.dp))
+
+            // —— 常驻通知栏 ——
+            var noticeEnabled by rememberSaveable { mutableStateOf(false) }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    stringResource(R.string.settings_notice_title),
+                    Modifier.weight(1f),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                androidx.compose.material3.Switch(
+                    checked = noticeEnabled,
+                    onCheckedChange = {
+                        noticeEnabled = it
+                        if (it) PersistentRecognizeService.start(context)
+                        else PersistentRecognizeService.stop(context)
+                    },
+                )
+            }
+            Text(
+                stringResource(R.string.settings_notice_desc),
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             HorizontalDivider(Modifier.padding(vertical = 16.dp))
 
             // —— 数据与备份 ——

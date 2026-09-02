@@ -17,6 +17,12 @@ class FluidCloudReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val pendingId = intent.getLongExtra(FluidCloudService.EXTRA_PENDING_ID, -1)
         if (pendingId < 0) return
+        // 点了"重新识别"立即自动收起通知栏，避免遮挡支付页
+        try {
+            context.sendBroadcast(Intent(Intent.ACTION_CLOSE_SYSTEM_DIALOGS))
+        } catch (_: Exception) {
+            // 个别 ROM 限制该系统广播，忽略即可
+        }
         val container = (context.applicationContext as LedgerAppProvider).container
 
         val result = goAsync()

@@ -23,6 +23,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * 流动云胶囊前台服务。
@@ -67,7 +68,7 @@ class FluidCloudService : Service() {
             .setShowWhen(false)
             .build()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startForeground(NOTIFICATION_ID, placeholder, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+            startForeground(NOTIFICATION_ID, placeholder, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
         } else {
             startForeground(NOTIFICATION_ID, placeholder)
         }
@@ -75,26 +76,31 @@ class FluidCloudService : Service() {
         // 每次启动/刷新时取消旧任务，重新开始
         job?.cancel()
         job = scope.launch {
-            val container = (applicationContext as LedgerAppProvider).container
-            val pending = container.pendingEntryDao.observeAll().first()
-            val latest = pending.maxByOrNull { it.time }
-            if (latest == null || latest.amountCents == null) {
-                stopSelf()
-                return@launch
-            }
-            // 用真实数据替换占位通知
-            // 同时通过 NotificationManager 以不同 ID 发布，确保即使服务被系统停止后通知仍然可见
-            val manager = getSystemService(NotificationManager::class.java)
-            manager.notify(PERSISTENT_NOTIFICATION_ID, buildNotification(latest))
-            // 每 30 秒检查一次，无待处理条目时自动停止
-            while (true) {
-                delay(30_000)
-                val current = container.pendingEntryDao.observeAll().first()
-                val hasValid = current.any { it.amountCents != null }
-                if (!hasValid) {
+            try {
+                val container = (applicationContext as LedgerAppProvider).container
+                val pending = withTimeoutOrNull(8_000L) { container.pendingEntryDao.observeAll().first() }
+                val latest = pending?.maxByOrNull { it.time }
+                if (latest == null || latest.amountCents == null) {
                     stopSelf()
                     return@launch
                 }
+                // 用真实数据替换占位通知
+                // 同时通过 NotificationManager 以不同 ID 发布，确保即使服务被系统停止后通知仍然可见
+                val manager = getSystemService(NotificationManager::class.java)
+                manager.notify(PERSISTENT_NOTIFICATION_ID, buildNotification(latest))
+                // 每 30 秒检查一次，无待处理条目时自动停止
+                while (true) {
+                    delay(30_000)
+                    val current = container.pendingEntryDao.observeAll().first()
+                    val hasValid = current.any { it.amountCents != null }
+                    if (!hasValid) {
+                        stopSelf()
+                        return@launch
+                    }
+                }
+            } catch (_: Exception) {
+                // 兜底：查询异常或页面切换时立刻停止，绝不永久挂着"加载中"占位通知
+                stopSelf()
             }
         }
         return START_STICKY
@@ -123,8 +129,11 @@ class FluidCloudService : Service() {
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_receipt)
+            .setColor(0xFF4C6EF5.toInt())
             .setContentTitle(title)
             .setContentText(text)
+            // 默认展开显示，"重新识别"按钮直接可见，无需点展开箭头
+            .setStyle(NotificationCompat.BigTextStyle().bigText("$text\n点下方\"重新识别\"可修正这笔账单"))
             .setOngoing(true)
             .setCategory(Notification.CATEGORY_STATUS)
             .setShowWhen(false)
