@@ -115,6 +115,29 @@ class BillReaderService : AccessibilityService() {
     @Volatile private var lastSnapshot: List<String>? = null
     @Volatile private var retries = 0
 
+    /** OCR 只取屏面中部区域：[状态栏下方, 屏面 60% 高度) */
+    private val OCR_TOP_RATIO = 0.6f
+
+    /** 状态栏高度（像素）。状态栏里的时间/运营商/网速/电量必须排除在 OCR 之外，否则会被误认成商户或金额 */
+    private fun statusBarHeight(): Int {
+        return try {
+            val resId = resources.getIdentifier("status_bar_height", "dimen", "android")
+            if (resId > 0) resources.getDimensionPixelSize(resId) else 0
+        } catch (_: Exception) {
+            0
+        }
+    }
+
+    /**
+     * 裁剪：从 topInset（状态栏底部）向下到 src.height*ratio 高的区域。
+     * 这样同时避开顶部状态栏文字与底部导航/角落元素。
+     */
+    private fun cropTop(src: android.graphics.Bitmap, ratio: Float, topInset: Int): android.graphics.Bitmap? {
+        val fromY = topInset.coerceAtMost(src.height - 1)
+        val toY = (src.height * ratio).toInt().coerceAtLeast(fromY + 1)
+        return android.graphics.Bitmap.createBitmap(src, 0, fromY, src.width, toY - fromY)
+    }
+
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = this
@@ -285,9 +308,16 @@ class BillReaderService : AccessibilityService() {
                             wrapped?.recycle()
                             screenshot.hardwareBuffer.close()
                             if (soft == null) {
-                                cont.resume(null); return
+                                if (cont.isActive) cont.resume(null); return
                             }
-                            textRecognizer.process(InputImage.fromBitmap(soft, 0))
+                            // 只识别屏面中部（状态栏下方 ~ 屏面 60%）：
+                            // 状态栏的时间/运营商/网速与底部导航都不是账单内容，全部排除在外。
+                            val frame = cropTop(soft, OCR_TOP_RATIO, statusBarHeight())
+                            soft.recycle()
+                            if (frame == null) {
+                                if (cont.isActive) cont.resume(null); return
+                            }
+                            textRecognizer.process(InputImage.fromBitmap(frame, 0))
                                 .addOnSuccessListener { visionText: Text ->
                                     val lines = visionText.textBlocks
                                         .flatMap { it.lines }
@@ -295,14 +325,14 @@ class BillReaderService : AccessibilityService() {
                                         .filter { it.isNotBlank() }
                                     // 隐私：release 下绝不输出 OCR 文本内容（含商户名等敏感信息）
                                     if (BuildConfig.DEBUG) Log.d(TAG, "ocr lines=${lines.size}: ${lines.joinToString("|").take(300)}")
-                                    soft.recycle()
+                                    frame.recycle()
                                     if (cont.isActive) cont.resume(
                                         BillPageParser.parseOcr(lines, expectedAmountCents = expectedAmountCents)
                                     )
                                 }
                                 .addOnFailureListener { e ->
                                     if (BuildConfig.DEBUG) Log.d(TAG, "ocr fail: ${e.message}")
-                                    soft.recycle()
+                                    frame.recycle()
                                     if (cont.isActive) cont.resume(null)
                                 }
                         }

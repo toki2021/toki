@@ -36,6 +36,8 @@
     <string name="settings_notification_granted">✅ 已授权，可以监听微信/支付宝的支付通知</string>
     <string name="settings_notification_denied">❌ 未授权。授权后 App 才能收到支付通知并生成待确认账单。</string>
     <string name="settings_grant_notification">去系统设置授权</string>
+    <string name="settings_service_alive">🟢 运行中，自动识别正常</string>
+    <string name="settings_service_frozen">⚠️ 开关已开但服务被系统冻结（常在 App 崩溃或被清理后发生），当前无法自动识别。去系统设置里把本服务的开关关一下再打开即可恢复。</string>
     <string name="settings_popup_generic">金额通知也弹确认窗</string>
     <string name="settings_popup_generic_desc">关闭（推荐）：支付通知只悄悄记下金额不弹窗，等读屏读到商户后才弹确认通知。\n开启：收到支付通知立刻弹确认（只有金额，商户需要手动补）。</string>
     <string name="settings_accessibility">读屏补全商户（无障碍）</string>

@@ -72,6 +72,8 @@ fun SettingsScreen(
     val uiVariantState by uiVariantVm.uiState.collectAsState()
     var listenerEnabled by remember { mutableStateOf(false) }
     var readerEnabled by remember { mutableStateOf(false) }
+    var listenerAlive by remember { mutableStateOf(false) }
+    var readerAlive by remember { mutableStateOf(false) }
 
     LifecycleResumeEffect(Unit) {
         listenerEnabled = NotificationManagerCompat.getEnabledListenerPackages(context)
@@ -79,6 +81,10 @@ fun SettingsScreen(
         readerEnabled = Settings.Secure.getString(
             context.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
         )?.contains("com.zhuanz.autoleger/.notify.BillReaderService") == true
+        // 系统开关"已开"不代表服务真的活着：App 崩溃/被清理后，ColorOS 不会自动重连，
+        // 必须看进程内实例是否存在才能发现"假死"（今天 ¥10.31 漏记的直接原因）
+        listenerAlive = com.zhuanz.autoleger.notify.PaymentNotificationListener.instance != null
+        readerAlive = com.zhuanz.autoleger.notify.BillReaderService.instance != null
         onPauseOrDispose { }
     }
 
@@ -245,12 +251,17 @@ fun SettingsScreen(
             Spacer(Modifier.height(4.dp))
             Text(
                 stringResource(
-                    if (listenerEnabled) R.string.settings_notification_granted
-                    else R.string.settings_notification_denied
+                    when {
+                        !listenerEnabled -> R.string.settings_notification_denied
+                        listenerAlive -> R.string.settings_service_alive
+                        else -> R.string.settings_service_frozen
+                    }
                 ),
                 fontSize = 13.sp,
+                color = if (listenerEnabled && !listenerAlive) MaterialTheme.colorScheme.error
+                else MaterialTheme.colorScheme.onSurface,
             )
-            if (!listenerEnabled) {
+            if (!listenerEnabled || (listenerEnabled && !listenerAlive)) {
                 Button(
                     onClick = { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) },
                     modifier = Modifier.padding(top = 8.dp),
@@ -281,12 +292,17 @@ fun SettingsScreen(
             Spacer(Modifier.height(4.dp))
             Text(
                 stringResource(
-                    if (readerEnabled) R.string.settings_reader_enabled
-                    else R.string.settings_reader_disabled
+                    when {
+                        !readerEnabled -> R.string.settings_reader_disabled
+                        readerAlive -> R.string.settings_reader_enabled
+                        else -> R.string.settings_service_frozen
+                    }
                 ),
                 fontSize = 13.sp,
+                color = if (readerEnabled && !readerAlive) MaterialTheme.colorScheme.error
+                else MaterialTheme.colorScheme.onSurface,
             )
-            if (!readerEnabled) {
+            if (!readerEnabled || (readerEnabled && !readerAlive)) {
                 Button(
                     onClick = { context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) },
                     modifier = Modifier.padding(top = 8.dp),

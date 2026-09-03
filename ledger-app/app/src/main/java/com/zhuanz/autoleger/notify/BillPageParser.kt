@@ -25,7 +25,7 @@ object BillPageParser {
 
     // 带负号的支出金额：支付宝"账单详情"等页面显示为 -16.60（无 ¥、带负号）。
     // 仅匹配带小数，避免把日期里的 "-09" 误当金额。
-    private val negativeAmountRe = Regex("-\\s*([0-9]+\\.\\d{1,2})")
+    private val negativeAmountRe = Regex("-\\s*[¥￥]?\\s*([0-9]+\\.\\d{1,2})")
 
     // 页面身份特征：支付完成后的结果页 + 账单详情页都算（结果页在每次支付后自动弹出）
     private val pageMarkers = listOf(
@@ -81,7 +81,12 @@ object BillPageParser {
     private val noiseWords = listOf(
         "支付", "付款", "收款", "退款", "成功", "失败", "账单", "凭证",
         "金额", "零钱", "银行卡", "余额", "正在加载",
+        // 营销/奖励行（真机样本：结果页下方的推荐卡片与积分条不是商户）
+        "去看看", "一键领", "待解锁", "领取", "点击", "积分", "充值金", "金币", "优惠券", "已入账",
     )
+
+    // 折扣率行（"本月达标后笔笔95折"、"9折起"）是营销文案不是商户
+    private val discountRate = Regex("""\d\s*折""")
 
     // 时间/日期行（历史列表页里大量出现，不是商户）
     private val timeOrDate = Regex("^(\\d{1,2}:\\d{2}|\\d{1,2}月\\d{1,2}日|\\d{4}[年/-])")
@@ -186,7 +191,7 @@ object BillPageParser {
             .distinct()
     }
 
-    /** OCR 行的金额挑选：期望金额锚定 → 剔除优惠/券/红包/积分语境行后，负号唯一 → 普通金额唯一 */
+    /** OCR 行的金额挑选：期望金额锚定 → 剔除优惠/券/红包/积分语境行后的唯一正金额 → 无正金额时才看负号金额 */
     private fun pickOcrAmount(lines: List<String>, expected: Long?): Long? {
         val mains = mutableListOf<Long>()
         val negatives = mutableListOf<Long>()
@@ -198,14 +203,24 @@ object BillPageParser {
             if (prev != null && ocrAmountToCents(prev) == null && discountWords.any { it in prev }) continue
             // 券/红包/积分行的金额不是实付（"13元新人优惠券"）
             if (l.contains("券") || l.contains("红包") || l.contains("积分")) continue
-            ocrAmountToCents(l)?.let { mains.add(it) }
-            parseOcrNegative(l)?.let { negatives.add(it) }
+            val neg = parseOcrNegative(l)
+            if (neg != null) {
+                // "-¥0.04"（真机样本：支付宝结果页"百次立减 -¥0.04"）是优惠额，
+                // 只进负号池，绝不混入正金额候选——曾因此把 ¥0.04 优惠额记成实付
+                negatives.add(neg)
+            } else {
+                ocrAmountToCents(l)?.let { mains.add(it) }
+            }
         }
         val distinct = mains.distinct()
         expected?.let { e -> if (e in distinct) return e }
-        val distNeg = negatives.distinct()
-        if (distNeg.size == 1) return distNeg[0]
-        return distinct.singleOrNull()
+        distinct.singleOrNull()?.let { return it }
+        // 页面没有任何正金额时才考虑负号金额（支付宝账单详情页 "-16.60" 风格，无 ¥ 符号）
+        if (distinct.isEmpty()) {
+            val distNeg = negatives.distinct()
+            if (distNeg.size == 1) return distNeg[0]
+        }
+        return null
     }
 
     /** OCR 行里的负号支出金额（-16.60），金额须带小数避免误抓日期/单号 */
@@ -243,7 +258,7 @@ object BillPageParser {
         amountRe.find(line)?.groupValues?.get(1)?.replace(",", "")
             ?.toCents()?.takeIf { it > 0 }
 
-    /** OCR 行是否像商户/对象名：拒绝金额、时间日期、噪声词、纯数字符号 */
+    /** OCR 行是否像商户/对象名：拒绝金额、时间日期、噪声词、营销文案、纯数字符号 */
     private fun ocrCandidateMerchant(s: String): String? {
         val t = s.trim().trimEnd('：', ':', ' ', '>')
         if (t.length < 2 || t.length > 30) return null
@@ -251,6 +266,7 @@ object BillPageParser {
         if (timeOrDate.containsMatchIn(t)) return null
         if (noiseWords.any { it in t }) return null
         if (noiseLabels.any { t.contains(it) }) return null
+        if (discountRate.containsMatchIn(t)) return null
         val hasCjk = t.any { it.code in 0x4E00..0x9FFF }
         val hasLetter = t.any { it.isLetter() }
         if (t.any { it.isDigit() } && !hasCjk) return null
@@ -291,14 +307,15 @@ object BillPageParser {
         }
     }
 
-    /** 兜底商户候选的干净性检查：排除金额、时间、噪声词、状态词、纯数字 */
+    /** 兜底商户候选的干净性检查：排除金额、时间、噪声词、营销文案、状态词、纯数字 */
     private fun cleanFallbackMerchant(t: String): String? {
         val s = t.trim().trimEnd('：', ':', ' ', '>')
         if (s.length < 2 || s.length > 30) return null
-        if (s.contains('¥') || s.contains('￥') || s.contains('元')) return null
+        if (s.contains('¥') || s.contains('￥') || s.contains("元")) return null
         if (timeOrDate.containsMatchIn(s)) return null
         if (noiseWords.any { it in s }) return null
         if (noiseLabels.any { s.contains(it) }) return null
+        if (discountRate.containsMatchIn(s)) return null
         val hasCjk = s.any { it.code in 0x4E00..0x9FFF }
         val hasLetter = s.any { it.isLetter() }
         if (s.any { it.isDigit() } && !hasCjk) return null
