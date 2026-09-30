@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -31,6 +33,8 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberTimePickerState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -38,6 +42,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -65,7 +70,7 @@ import java.util.Locale
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun EditEntryScreen(txId: Long, pendingId: Long, onDone: () -> Unit) {
+fun EditEntryScreen(txId: Long, pendingId: Long, onDone: () -> Unit, onDelete: (TransactionEntity) -> Unit) {
     val container = rememberContainer()
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -76,12 +81,17 @@ fun EditEntryScreen(txId: Long, pendingId: Long, onDone: () -> Unit) {
     val recentMerchants by container.transactionDao.observeRecentMerchants(8, genericMerchants)
         .collectAsState(initial = emptyList())
 
-    var type by remember { mutableStateOf(TYPE_EXPENSE) }
-    var amountText by remember { mutableStateOf("") }
-    var merchant by remember { mutableStateOf("") }
-    var categoryId by remember { mutableStateOf<Long?>(null) }
-    var time by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    var type by rememberSaveable { mutableStateOf(TYPE_EXPENSE) }
+    var amountText by rememberSaveable { mutableStateOf("") }
+    var merchant by rememberSaveable { mutableStateOf("") }
+    var categoryId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var time by rememberSaveable { mutableLongStateOf(System.currentTimeMillis()) }
+    var formInitialized by rememberSaveable { mutableStateOf(false) }
     var loaded by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var original by remember { mutableStateOf<TransactionEntity?>(null) }
+    var deleteDialog by remember { mutableStateOf(false) }
+    var saving by remember { mutableStateOf(false) }
 
     val dateFmt = remember { SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()) }
 
@@ -90,19 +100,26 @@ fun EditEntryScreen(txId: Long, pendingId: Long, onDone: () -> Unit) {
         if (loaded) return@LaunchedEffect
         when {
             txId > 0 -> container.transactionDao.getById(txId)?.let { tx ->
+                original = tx
+                if (!formInitialized) {
                 type = tx.type
-                amountText = String.format("%.2f", tx.amountCents / 100.0)
+                amountText = java.math.BigDecimal.valueOf(tx.amountCents, 2).toPlainString()
                 merchant = tx.merchant
                 categoryId = tx.categoryId
                 time = tx.time
+                }
+                formInitialized = true
                 loaded = true
             }
             pendingId > 0 -> container.pendingEntryDao.getById(pendingId)?.let { entry ->
+                if (!formInitialized) {
                 val hint = EntryConfirmer.extractCategoryHint(container, entry)
-                hint.amountCents?.let { amountText = String.format("%.2f", it / 100.0) }
+                hint.amountCents?.let { amountText = java.math.BigDecimal.valueOf(it, 2).toPlainString() }
                 merchant = hint.merchant ?: ""
                 time = entry.time
                 type = if (entry.text.contains("退款")) TYPE_REFUND else TYPE_EXPENSE
+                }
+                formInitialized = true
                 loaded = true
             }
             else -> loaded = true
@@ -117,8 +134,8 @@ fun EditEntryScreen(txId: Long, pendingId: Long, onDone: () -> Unit) {
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
 
-    Scaffold(topBar = {
-        TopAppBar(title = {
+    Scaffold(contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0), topBar = {
+        TopAppBar(navigationIcon = { androidx.compose.material3.IconButton(onClick = onDone) { androidx.compose.material3.Icon(Icons.AutoMirrored.Rounded.ArrowBack, "返回") } }, title = {
             Text(
                 stringResource(
                     when {
@@ -132,7 +149,7 @@ fun EditEntryScreen(txId: Long, pendingId: Long, onDone: () -> Unit) {
     }) { padding ->
         Column(
             Modifier.padding(padding).fillMaxSize().padding(16.dp)
-                .verticalScroll(rememberScrollState()),
+                .imePadding().verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
@@ -154,6 +171,7 @@ fun EditEntryScreen(txId: Long, pendingId: Long, onDone: () -> Unit) {
                 label = { Text(stringResource(R.string.field_amount)) },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal),
             )
 
             OutlinedTextField(
@@ -197,12 +215,16 @@ fun EditEntryScreen(txId: Long, pendingId: Long, onDone: () -> Unit) {
                 Text("时间：${dateFmt.format(Date(time))}")
             }
 
+            if (error != null) Text(error!!, color = MaterialTheme.colorScheme.error)
             Button(
+                enabled = loaded && !saving && (amountText.toCents() ?: 0L) > 0,
                 onClick = {
+                    saving = true
                     // BigDecimal 精确换算，避免 Math.round(amount * 100) 的 double 精度损失
                     val cents = amountText.toCents() ?: 0L
                     if (cents <= 0) return@Button
                     scope.launch {
+                        try {
                         when {
                             txId > 0 -> container.transactionDao.getById(txId)?.let { old ->
                                 container.transactionDao.update(
@@ -242,12 +264,32 @@ fun EditEntryScreen(txId: Long, pendingId: Long, onDone: () -> Unit) {
                             )
                         }
                         onDone()
+                        } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+                        catch (_: Exception) { error = "保存失败，请重试" }
+                        finally { saving = false }
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
-            ) { Text(stringResource(R.string.common_save)) }
+            ) { Text(if (saving) "保存中…" else stringResource(R.string.common_save)) }
+            if (txId > 0 && original != null) {
+                TextButton(onClick = { deleteDialog = true }, enabled = !saving,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                    Text("删除这笔账单", color = MaterialTheme.colorScheme.error)
+                }
+            }
         }
     }
+
+    if (deleteDialog) AlertDialog(
+        onDismissRequest = { deleteDialog = false },
+        title = { Text("删除这笔账单？") },
+        text = { Text("删除后可通过底部提示撤销。") },
+        confirmButton = { TextButton(onClick = {
+            deleteDialog = false
+            original?.let { onDelete(it) }
+        }) { Text("删除", color = MaterialTheme.colorScheme.error) } },
+        dismissButton = { TextButton(onClick = { deleteDialog = false }) { Text("取消") } },
+    )
 
     if (showDatePicker) {
         val state = rememberDatePickerState(initialSelectedDateMillis = time)

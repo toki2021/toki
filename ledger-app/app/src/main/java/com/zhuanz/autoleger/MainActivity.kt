@@ -8,54 +8,31 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.activity.viewModels
 import androidx.core.content.ContextCompat
 import com.zhuanz.autoleger.notify.ConfirmNotifier
 import com.zhuanz.autoleger.ui.AutoLedgerApp
-import com.zhuanz.autoleger.ui.UiVariant
-import com.zhuanz.autoleger.ui.UiVariantViewModel
-import kotlinx.coroutines.channels.BufferOverflow
-import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.receiveAsFlow
 
 class MainActivity : ComponentActivity() {
 
     private val notifPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
-    /**
-     * Activity 级 ViewModel：与 Compose 树中 viewModel() 获取的是同一实例，
-     * 因此这里对状态的修改会实时反映到 AutoLedgerTheme / AppNav / SettingsScreen。
-     */
-    private val uiVariantVm: UiVariantViewModel by viewModels()
-
-    /** 待确认 id 深链事件：onCreate / onNewIntent 转发给 Compose 导航 */
-    private val pendingDeepLinks = MutableSharedFlow<Long>(
-        extraBufferCapacity = 8,
-        onBufferOverflow = BufferOverflow.DROP_OLDEST,
-    )
+    // Channel buffers cold-start notifications until Compose starts collecting.
+    private val pendingDeepLinks = kotlinx.coroutines.channels.Channel<Long>(kotlinx.coroutines.channels.Channel.BUFFERED)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         requestPostNotificationsIfNeeded()
         ConfirmNotifier.ensureChannel(this)
-        uiVariantVm.load(this)
-        // 调试/预览：am start --ez preview true --ei ui_variant N 直接进入预览并切换方案
-        if (intent?.getBooleanExtra("preview", false) == true) {
-            uiVariantVm.setPreview(true)
-        }
-        intent?.getIntExtra("ui_variant", -1)?.takeIf { it >= 0 }?.let { idx ->
-            val v = UiVariant.fromIndex(idx)
-            if (uiVariantVm.uiState.value.previewing) {
-                uiVariantVm.setPreviewVariant(v)
-            } else {
-                uiVariantVm.apply(this, v)
-            }
-        }
+        // Retire only the old appearance preferences. Ledger and other settings are untouched.
+        getSharedPreferences("settings", MODE_PRIVATE).edit()
+            .remove("ui_variant").remove("ui_variant_v2").apply()
 
         setContent {
             com.zhuanz.autoleger.ui.AutoLedgerTheme {
-                AutoLedgerApp(deepLinkFlow = pendingDeepLinks)
+                AutoLedgerApp(deepLinkFlow = pendingDeepLinks.receiveAsFlow())
             }
         }
         handlePendingIntent(intent)
@@ -69,7 +46,10 @@ class MainActivity : ComponentActivity() {
 
     private fun handlePendingIntent(intent: Intent?) {
         val pendingId = intent?.getLongExtra(ConfirmNotifier.EXTRA_PENDING_ID, -1L) ?: -1L
-        if (pendingId > 0) pendingDeepLinks.tryEmit(pendingId)
+        if (pendingId > 0) {
+            pendingDeepLinks.trySend(pendingId)
+            intent?.removeExtra(ConfirmNotifier.EXTRA_PENDING_ID)
+        }
     }
 
     private fun requestPostNotificationsIfNeeded() {
