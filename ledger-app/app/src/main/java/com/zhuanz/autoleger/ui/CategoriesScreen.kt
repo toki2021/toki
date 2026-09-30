@@ -61,7 +61,7 @@ fun CategoriesScreen(onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
     var showAdd by remember { mutableStateOf(false) }
 
-    Scaffold(
+    Scaffold(contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0),
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.category_manage_title)) },

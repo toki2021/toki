@@ -73,7 +73,7 @@ fun AmountText(
 ) {
     val formatter = rememberAmountFormat()
     Text(
-        text = formatYuan(formatter, cents / 100.0),
+        text = (if (cents < 0) "-¥" else "¥") + formatter.format(java.math.BigDecimal.valueOf(cents, 2).abs()),
         modifier = modifier,
         style = style.copy(fontFeatureSettings = "tnum"),
         color = if (color == Color.Unspecified) MaterialTheme.colorScheme.onSurface else color,

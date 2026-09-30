@@ -62,7 +62,7 @@ class PaymentNotificationListener : NotificationListenerService() {
     /**
      * 收起通知栏（供手动"重新识别"触发前先把遮罩收掉，避免截屏拍到通知栏内容）。
      * collapsePanels() 是未进入编译期 stub 的隐藏方法，用反射调用；
-     * 若被隐藏 API 限制拦截，则由系统广播 ACTION_CLOSE_SYSTEM_DIALOGS 兜底。
+     * 若被隐藏 API 限制拦截，调用方使用无障碍的收起通知栏操作兜底。
      */
     fun collapseShade() {
         try {
@@ -70,7 +70,7 @@ class PaymentNotificationListener : NotificationListenerService() {
                 .getMethod("collapsePanels")
             method.invoke(this)
         } catch (_: Exception) {
-            // 隐藏 API 拦截或反射异常：静默忽略，交由系统广播兜底
+            // 隐藏 API 拦截或反射异常：调用方使用无障碍操作兜底
         }
     }
 

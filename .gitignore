@@ -28,3 +28,4 @@ app/build/
 .zcode/
 SELECT id,merchant,amountCents FROM transactions ORDER BY time DESC LIMIT 2;
 SELECT id,merchant,amountCents FROM transactions ORDER BY time DESC LIMIT 3;
+.kotlin/

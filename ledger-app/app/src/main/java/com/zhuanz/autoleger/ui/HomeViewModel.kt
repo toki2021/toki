@@ -1,63 +1,73 @@
 package com.zhuanz.autoleger.ui
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.zhuanz.autoleger.data.AppContainer
+import com.zhuanz.autoleger.data.CategoryEntity
 import com.zhuanz.autoleger.data.TransactionEntity
-import com.zhuanz.autoleger.data.TransactionRepository
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
+import java.time.LocalDate
+import java.time.YearMonth
 
-/**
- * 首页 ViewModel —— 删除与 Undo 逻辑的中心。
- *
- * 替代了之前的全局 `deleteScope`（一个永不停释放的
- * 顶级 CoroutineScope，导致 Activity 销毁后协程仍挂起）。
- * 所有协程均在 viewModelScope 上运行，生命周期与 ViewModel 一致。
- */
-class HomeViewModel(private val container: AppContainer) : ViewModel() {
+data class HomeUiState(
+    val loading: Boolean = true,
+    val today: LocalDate = LocalDate.now(),
+    val month: YearMonth = YearMonth.now(),
+    val selectedCategory: Long? = null,
+    val categories: List<CategoryEntity> = emptyList(),
+    val summary: MonthSummary = MonthSummary(emptyList(), 0, 0, 0),
+    val visible: List<TransactionEntity> = emptyList(),
+    val yearExpense: Long = 0,
+    val allExpense: Long = 0,
+)
 
-    private val repo: TransactionRepository = container.transactionRepository
+class HomeViewModel(private val container: AppContainer, private val saved: SavedStateHandle) : ViewModel() {
+    private val month = saved.getStateFlow("month", YearMonth.now().toString())
+    private val category = saved.getStateFlow<Long?>("category", null)
+    private val today = MutableStateFlow(LocalDate.now())
+    private val undoChannel = Channel<TransactionEntity>(Channel.BUFFERED)
+    val undoEvents = undoChannel.receiveAsFlow()
+    private val errorChannel = Channel<String>(Channel.BUFFERED)
+    val errors = errorChannel.receiveAsFlow()
+    val uiState = combine(container.transactionDao.observeAll(), container.categoryDao.observeAll(), month, category, today) {
+        entries, categories, period, selected, date ->
+        val summary = summarizeMonth(entries, YearMonth.parse(period), date)
+        val validCategory = selected?.takeIf { it == UNCATEGORIZED_ID || categories.any { c -> c.id == it } }
+        // Deleted categories are presented as uncategorized, including historical references.
+        val known = categories.map { it.id }.toSet()
+        val normalized = summary.transactions.map { if (it.categoryId !in known) it.copy(categoryId = null) else it }
+        val zone = java.time.ZoneId.systemDefault()
+        val yearStart = date.withDayOfYear(1).atStartOfDay(zone).toInstant().toEpochMilli()
+        val yearEnd = date.withDayOfYear(1).plusYears(1).atStartOfDay(zone).toInstant().toEpochMilli()
+        HomeUiState(loading = false, today = date, month = YearMonth.parse(period), selectedCategory = validCategory,
+            categories = categories, summary = summary, visible = filterCategory(normalized, validCategory),
+            yearExpense = entries.filter { it.type != "REFUND" && it.time >= yearStart && it.time < yearEnd }.sumOf { it.amountCents },
+            allExpense = entries.filter { it.type != "REFUND" }.sumOf { it.amountCents })
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeUiState(month = YearMonth.parse(month.value), selectedCategory = category.value))
 
-    val transactions: Flow<List<TransactionEntity>> = repo.observeAll()
-    val categories = container.categoryDao.observeAll()
-
-    /** 待确认的删除目标；用户在 Dialog 中点"删除"后真正执行 */
-    var pendingDeleteTx: TransactionEntity? = null
-        private set
-
-    /** 一次性事件：通知 UI 显示 Undo Snackbar（payload 为被删实体） */
-    private val _undoEvents = Channel<TransactionEntity>(Channel.BUFFERED)
-    val undoEvents: Flow<TransactionEntity> = _undoEvents.receiveAsFlow()
-
-    /** 记录待删除目标（✕按钮点击时） */
-    fun requestDelete(tx: TransactionEntity) {
-        pendingDeleteTx = tx
-    }
-
-    /** Dialog 取消或重组后清空待删除目标 */
-    fun clearPendingDelete() {
-        pendingDeleteTx = null
-    }
-
-    /**
-     * 真正执行删除：先读取完整实体，再按 id 删除，
-     * 最后向 UI 发送 Undo Snackbar 事件。
-     */
-    fun confirmDelete() {
-        val target = pendingDeleteTx ?: return
-        pendingDeleteTx = null
+    fun selectMonth(value: YearMonth) { saved["month"] = value.toString() }
+    fun selectCategory(value: Long?) { saved["category"] = value }
+    fun refreshDate() { today.value = LocalDate.now() }
+    fun delete(tx: TransactionEntity, onDeleted: () -> Unit) {
         viewModelScope.launch {
-            val entity = repo.getById(target.id) ?: return@launch
-            repo.deleteById(entity.id)
-            _undoEvents.send(entity)
+            try {
+            val original = container.transactionRepository.getById(tx.id) ?: return@launch
+            container.transactionRepository.deleteById(original.id)
+            undoChannel.send(original)
+            onDeleted()
+            } catch (e: CancellationException) { throw e }
+            catch (_: Exception) { errorChannel.send("删除失败，请重试") }
         }
     }
-
-    /** Snackbar "撤销"回调：把被删实体重新插回（id 主键不变） */
     fun undo(tx: TransactionEntity) {
-        viewModelScope.launch { repo.restore(tx) }
+        viewModelScope.launch {
+            try { container.transactionRepository.restore(tx) }
+            catch (e: CancellationException) { throw e }
+            catch (_: Exception) { errorChannel.send("撤销失败，请重试") }
+        }
     }
 }

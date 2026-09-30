@@ -1,15 +1,15 @@
 package com.zhuanz.autoleger.ui
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+
 import android.content.Intent
 import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.width
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Row
@@ -17,35 +17,28 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.res.stringResource
 import com.zhuanz.autoleger.LedgerAppProvider
 import com.zhuanz.autoleger.R
@@ -64,12 +57,12 @@ import java.util.Locale
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
-    uiVariantVm: UiVariantViewModel,
+    onRules: () -> Unit,
+    onCategories: () -> Unit,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val appContainer = (context.applicationContext as LedgerAppProvider).container
-    val uiVariantState by uiVariantVm.uiState.collectAsState()
     var listenerEnabled by remember { mutableStateOf(false) }
     var readerEnabled by remember { mutableStateOf(false) }
     var listenerAlive by remember { mutableStateOf(false) }
@@ -184,7 +177,7 @@ fun SettingsScreen(
         }
     }
 
-    Scaffold(topBar = { TopAppBar(title = { Text(stringResource(R.string.nav_settings)) }) }) { padding ->
+    Scaffold(contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0), topBar = { TopAppBar(title = { Text(stringResource(R.string.nav_settings)) }) }) { padding ->
         Column(
             Modifier
                 .padding(padding)
@@ -192,61 +185,16 @@ fun SettingsScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp)
         ) {
-            // —— 界面风格：抽拉折叠列表 ——
-            var styleExpanded by remember { mutableStateOf(false) }
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .clickable { styleExpanded = !styleExpanded }
-                    .padding(vertical = 10.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(stringResource(R.string.settings_ui_style), style = MaterialTheme.typography.titleMedium)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        uiVariantState.current.label,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    Text(
-                        if (styleExpanded) "▴" else "▾",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+            LedgerSection {
+            Text("账本管理", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(12.dp))
+            OutlinedButton(onClick = onRules, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("自动分类规则") }
+            OutlinedButton(onClick = onCategories, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("管理分类") }
+            Text("温暖生活 · 外观跟随系统", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            AnimatedVisibility(visible = styleExpanded) {
-                Column {
-                    Text(
-                        stringResource(R.string.settings_preview_variants),
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(10.dp))
-                            .clickable { uiVariantVm.setPreview(true) }
-                            .padding(vertical = 6.dp),
-                    )
-                    UiVariant.entries.forEach { v ->
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .clickable { uiVariantVm.apply(context, v) }
-                                .padding(vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            androidx.compose.material3.RadioButton(
-                                selected = uiVariantState.current == v,
-                                onClick = { uiVariantVm.apply(context, v) },
-                            )
-                            Text(v.label, style = MaterialTheme.typography.bodyMedium)
-                        }
-                    }
-                }
-            }
-            HorizontalDivider(Modifier.padding(vertical = 16.dp))
+            Spacer(Modifier.height(12.dp))
+            LedgerSection {
+
             Text(stringResource(R.string.settings_notification_permission), style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(4.dp))
             Text(
@@ -257,7 +205,7 @@ fun SettingsScreen(
                         else -> R.string.settings_service_frozen
                     }
                 ),
-                fontSize = 13.sp,
+                style = MaterialTheme.typography.bodyMedium,
                 color = if (listenerEnabled && !listenerAlive) MaterialTheme.colorScheme.error
                 else MaterialTheme.colorScheme.onSurface,
             )
@@ -267,7 +215,10 @@ fun SettingsScreen(
                     modifier = Modifier.padding(top = 8.dp),
                 ) { Text(stringResource(R.string.settings_grant_notification)) }
             }
-            HorizontalDivider(Modifier.padding(vertical = 16.dp))
+            }
+            Spacer(Modifier.height(12.dp))
+            LedgerSection {
+
             val prefs = context.getSharedPreferences("settings", android.content.Context.MODE_PRIVATE)
             var genericPopup by remember {
                 mutableStateOf(prefs.getBoolean("notify_popup_generic", false))
@@ -284,10 +235,13 @@ fun SettingsScreen(
             }
             Text(
                 stringResource(R.string.settings_popup_generic_desc),
-                fontSize = 12.sp,
+                style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            HorizontalDivider(Modifier.padding(vertical = 16.dp))
+            }
+            Spacer(Modifier.height(12.dp))
+            LedgerSection {
+
             Text(stringResource(R.string.settings_accessibility), style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(4.dp))
             Text(
@@ -298,7 +252,7 @@ fun SettingsScreen(
                         else -> R.string.settings_service_frozen
                     }
                 ),
-                fontSize = 13.sp,
+                style = MaterialTheme.typography.bodyMedium,
                 color = if (readerEnabled && !readerAlive) MaterialTheme.colorScheme.error
                 else MaterialTheme.colorScheme.onSurface,
             )
@@ -308,7 +262,10 @@ fun SettingsScreen(
                     modifier = Modifier.padding(top = 8.dp),
                 ) { Text(stringResource(R.string.settings_grant_accessibility)) }
             }
-            HorizontalDivider(Modifier.padding(vertical = 16.dp))
+            }
+            Spacer(Modifier.height(12.dp))
+            LedgerSection {
+
 
             // —— 常驻通知栏 ——
             var noticeEnabled by rememberSaveable { mutableStateOf(false) }
@@ -329,17 +286,20 @@ fun SettingsScreen(
             }
             Text(
                 stringResource(R.string.settings_notice_desc),
-                fontSize = 12.sp,
+                style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            HorizontalDivider(Modifier.padding(vertical = 16.dp))
+            }
+            Spacer(Modifier.height(12.dp))
+            LedgerSection {
+
 
             // —— 数据与备份 ——
             Text(stringResource(R.string.settings_data_backup), style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(4.dp))
             Text(
                 stringResource(R.string.settings_data_backup_desc),
-                fontSize = 13.sp,
+                style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(12.dp))
@@ -366,7 +326,7 @@ fun SettingsScreen(
             Spacer(Modifier.height(4.dp))
             Text(
                 stringResource(R.string.backup_csv_guide),
-                fontSize = 12.sp,
+                style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(12.dp))
@@ -381,7 +341,7 @@ fun SettingsScreen(
                     Spacer(Modifier.height(2.dp))
                     Text(
                         stringResource(R.string.backup_auto_desc),
-                        fontSize = 12.sp,
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
@@ -402,22 +362,29 @@ fun SettingsScreen(
                 } else {
                     stringResource(R.string.backup_auto_last_none)
                 },
-                fontSize = 12.sp,
+                style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            }
+            Spacer(Modifier.height(12.dp))
+            LedgerSection {
 
-            HorizontalDivider(Modifier.padding(vertical = 16.dp))
             Text(stringResource(R.string.settings_privacy), style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(4.dp))
             Text(
                 stringResource(R.string.settings_privacy_desc),
-                fontSize = 13.sp,
+                style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            HorizontalDivider(Modifier.padding(vertical = 16.dp))
+            }
+            Spacer(Modifier.height(12.dp))
+            LedgerSection {
+
             Text(stringResource(R.string.settings_about), style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(4.dp))
             Text(stringResource(R.string.settings_about_desc), fontSize = 13.sp)
+            }
+            Spacer(Modifier.height(12.dp))
         }
     }
 }

@@ -30,6 +30,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -65,7 +66,7 @@ private fun categoryGroupOf(name: String): String {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RulesScreen(onManageCategories: () -> Unit) {
+fun RulesScreen(onManageCategories: () -> Unit, onBack: () -> Unit) {
     val container = rememberContainer()
     val rules by container.ruleDao.observeAll().collectAsState(initial = emptyList())
     val categories by container.categoryDao.observeAll().collectAsState(initial = emptyList())
@@ -73,9 +74,10 @@ fun RulesScreen(onManageCategories: () -> Unit) {
 
     var showAdd by remember { mutableStateOf(false) }
 
-    Scaffold(
+    Scaffold(contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0),
         topBar = {
             TopAppBar(
+                navigationIcon = { androidx.compose.material3.IconButton(onClick = onBack) { androidx.compose.material3.Icon(Icons.AutoMirrored.Rounded.ArrowBack, "返回") } },
                 title = { Text("分类规则") },
                 actions = {
                     TextButton(onClick = onManageCategories) { Text("管理分类") }

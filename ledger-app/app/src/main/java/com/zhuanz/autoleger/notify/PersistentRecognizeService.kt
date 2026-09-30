@@ -118,7 +118,9 @@ class PersistentRescanReceiver : android.content.BroadcastReceiver() {
             } catch (_: Exception) {
             }
             try {
-                context.sendBroadcast(Intent(Intent.ACTION_CLOSE_SYSTEM_DIALOGS))
+                BillReaderService.instance?.performGlobalAction(
+                    android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_DISMISS_NOTIFICATION_SHADE,
+                )
             } catch (_: Exception) {
             }
         }
